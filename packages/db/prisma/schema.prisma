@@ -1,0 +1,1893 @@
+// ─── Générateur & Source de données ───
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Énumérations ───
+
+/// Types d'événements de logs disponibles
+enum LogEventType {
+  MESSAGE_DELETE
+  MESSAGE_EDIT
+  MEMBER_JOIN
+  MEMBER_LEAVE
+  MEMBER_BAN
+  MEMBER_UNBAN
+  MEMBER_KICK
+  MEMBER_TIMEOUT
+  MEMBER_ROLE_ADD
+  MEMBER_ROLE_REMOVE
+  CHANNEL_CREATE
+  CHANNEL_DELETE
+  CHANNEL_UPDATE
+  ROLE_CREATE
+  ROLE_DELETE
+  ROLE_UPDATE
+  VOICE_JOIN
+  VOICE_LEAVE
+  VOICE_MOVE
+  EMOJI_CREATE
+  EMOJI_DELETE
+  INVITE_CREATE
+  INVITE_DELETE
+  THREAD_CREATE
+  THREAD_DELETE
+  THREAD_UPDATE
+  STAGE_START
+  STAGE_END
+  AUTO_MOD
+  MEMBER_WARN
+  MEMBER_MUTE
+  MEMBER_UNMUTE
+}
+
+/// Préférences de notification de level up
+enum LevelUpNotification {
+  DM
+  CHANNEL
+  NONE
+}
+
+/// Types de sanctions de modération
+enum ModerationCaseType {
+  WARN
+  MUTE
+  UNMUTE
+  KICK
+  BAN
+  TEMPBAN
+  UNBAN
+  TIMEOUT
+}
+
+/// Statut d'un ticket
+enum TicketStatus {
+  OPEN
+  CLAIMED
+  PENDING
+  CLOSED
+  DELETED
+}
+
+/// Statut de déploiement
+enum DeploymentStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  ROLLED_BACK
+}
+
+/// Environnement cible d'un déploiement
+enum DeployEnvironment {
+  DEVELOPMENT
+  STAGING
+  PRODUCTION
+}
+
+/// Type de rôle automatique
+enum AutoroleType {
+  JOIN
+  BOT
+  LEVEL
+  REACTION
+}
+
+/// Type de transaction économique
+enum TransactionType {
+  DAILY
+  TRANSFER
+  SHOP_BUY
+  GAMBLE
+  ADMIN
+  EARN
+  INTEREST
+}
+
+/// Type d'item de boutique
+enum ItemType {
+  ROLE
+  XP_BOOST
+  ANTI_THEFT
+  LOTTO_TICKET
+}
+
+/// Type de quête
+enum QuestType {
+  DAILY
+  WEEKLY
+}
+
+/// Statut d'une quête
+enum QuestStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+}
+
+/// Type d'objectif de quête
+enum QuestObjectiveType {
+  SEND_MESSAGES
+  WIN_BLACKJACK
+  WIN_ROULETTE
+  EARN_MONEY
+  USE_COMMAND
+  LEVEL_UP
+}
+
+/// Statut d'un giveaway
+enum GiveawayStatus {
+  RUNNING
+  ENDED
+  CANCELLED
+}
+
+/// Statut d'un sondage
+enum PollStatus {
+  OPEN
+  CLOSED
+}
+
+/// Statut d'une suggestion
+enum SuggestionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  IMPLEMENTED
+}
+
+/// Mode de boucle musicale
+enum LoopMode {
+  NONE
+  TRACK
+  QUEUE
+}
+
+/// Statut d'abonnement premium
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+/// Actions auditées
+enum AuditAction {
+  GUILD_UPDATE
+  GUILD_DELETE
+  MEMBER_KICK
+  MEMBER_BAN
+  MEMBER_UNBAN
+  MEMBER_TIMEOUT
+  MEMBER_WARN
+  MEMBER_MUTE
+  MEMBER_UNMUTE
+  TICKET_CREATE
+  TICKET_CLOSE
+  TICKET_DELETE
+  MESSAGE_CREATE
+  MESSAGE_PURGE
+  ROLE_CREATE
+  ROLE_DELETE
+  ROLE_UPDATE
+  CHANNEL_CREATE
+  CHANNEL_DELETE
+  CHANNEL_UPDATE
+  SETTINGS_UPDATE
+  PREMIUM_UPDATE
+  ECONOMY_ADMIN
+  PLUGIN_ENABLE
+  PLUGIN_DISABLE
+  BLACKLIST_ADD
+  BLACKLIST_REMOVE
+  BLACKLIST_USER
+  UNBLACKLIST_USER
+  BLACKLIST_GUILD
+  UNBLACKLIST_GUILD
+  FORCE_LEAVE
+  DEPLOYMENT_START
+  DEPLOYMENT_SUCCESS
+  DEPLOYMENT_FAILURE
+  DEPLOYMENT_ROLLBACK
+  PREMIUM_GRANT
+  PREMIUM_REVOKE
+  ALPHA_MODE_TOGGLE
+  CHANGELOG_PUBLISH
+  GLOBAL_ANNOUNCEMENT
+  SERVICE_RESTART
+  BACKUP_CREATED
+  BACKUP_RESTORED
+  SETTINGS_CHANGE
+  OWNER_LOGIN
+  OWNER_LOGOUT
+  MODERATION_CASE_DELETED
+  MODERATION_CASE_REVOKED
+  AUTO_MOD_VIOLATION
+  AUTO_MOD_SANCTION
+}
+
+// ─── Modèles ───
+
+/// Utilisateur du bot
+model User {
+  id           String  @id @default(cuid()) @map("id")
+  discordId    String  @unique @map("discord_id")
+  username     String  @map("username")
+  displayName  String? @map("display_name")
+  avatar       String? @map("avatar")
+  email        String? @map("email")
+  locale       String  @default("fr") @map("locale")
+  theme        String  @default("DARK") @map("theme")
+  snowflakes   Boolean @default(true) @map("snowflakes")
+  notifyDaily  Boolean @default(false) @map("notify_daily")
+  notifyWeekly Boolean @default(false) @map("notify_weekly")
+
+  premiumSubscription PremiumSubscription?
+
+  economyGuilds   EconomyWallet[]
+  xpProfiles      XPProfile[]
+  moderationCases ModerationCase[]
+  ticketsCreated  Ticket[]         @relation("TicketCreator")
+  ticketClaims    TicketClaim[]
+  claimedTickets  Ticket[]         @relation("TicketClaims")
+  suggestions     Suggestion[]
+  pollVotes       PollVote[]
+  giveawayEntries GiveawayEntry[]
+  auditLogs       AuditLog[]
+  ownerLogs       OwnerLog[]
+  sessions        Session[]
+  owner2FA        Owner2FA?
+  changelogs      Changelog[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+/// Session de connexion
+model Session {
+  id                    String    @id @map("id")
+  userId                String    @map("user_id")
+  guildId               String?   @map("guild_id")
+  token                 String    @unique @map("token")
+  discordAccessToken    String?   @map("discord_access_token")
+  discordRefreshToken   String?   @map("discord_refresh_token")
+  discordTokenExpiresAt DateTime? @map("discord_token_expires_at")
+  expiresAt             DateTime  @map("expires_at")
+  ownerVerifiedAt       DateTime? @map("owner_verified_at")
+  owner2faVerifiedAt    DateTime? @map("owner_2fa_verified_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+/// Authentification à deux facteurs pour les propriétaires
+model Owner2FA {
+  id             String    @id @default(cuid()) @map("id")
+  userId         String    @unique @map("user_id")
+  secret         String    @map("secret")
+  enabled        Boolean   @default(false) @map("enabled")
+  verified       Boolean   @default(false) @map("verified")
+  lastVerifiedAt DateTime? @map("last_verified_at")
+  /// JSON object { "<sha256 hex>": usedAtEpochMs | null } for one-time recovery codes.
+  recoveryCodes  String?   @map("recovery_codes")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("owner_2fa")
+}
+
+/// Hash du mot de passe owner (stocké en base, jamais en clair)
+model OwnerPassword {
+  id        String   @id @default(cuid()) @map("id")
+  hash      String   @map("hash")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("owner_password")
+}
+
+/// Serveur Discord
+model Guild {
+  id          String  @id @map("id")
+  name        String  @map("name")
+  icon        String? @map("icon")
+  ownerId     String? @map("owner_id")
+  memberCount Int     @default(0) @map("member_count")
+  botPresent  Boolean @default(true) @map("bot_present")
+
+  settings            GuildSettings?
+  modulesEnabled      ModuleEnabled?
+  logSettings         LogSettings?
+  xpSettings          XPSettings?
+  welcomeSettings     WelcomeSettings?
+  economySettings     EconomySettings?
+  protectionSettings  ProtectionSettings?
+  autoroleSettings    AutoroleSettings?
+  autoModSettings     AutoModSettings?
+  ticketSettings      TicketSettings?
+  musicQueues         MusicQueue?
+  musicSettings       MusicSettings?
+  blacklist           BlacklistGuild?
+  premiumSubscription PremiumSubscription?
+  minigameSettings    MinigameSettings?
+  starboardSettings   StarboardSettings?
+  formSettings        FormSettings?
+
+  moderationCases     ModerationCase[]
+  tickets             Ticket[]
+  ticketCategories    TicketCategory[]
+  xpProfiles          XPProfile[]
+  xpRoleRewards       XPRoleReward[]
+  rankCardSettings    RankCardSettings?
+  economyWallets      EconomyWallet[]
+  economyTransactions EconomyTransaction[]
+  quests              Quest[]
+  questProgress       QuestProgress[]
+  musicHistory        MusicHistoryEntry[]
+  giveaways           Giveaway[]
+  polls               Poll[]
+  suggestions         Suggestion[]
+  autoroleEntries     AutoroleEntry[]
+  savedEmbeds         SavedEmbed[]
+  guildMembers        GuildMember[]
+  auditLogs           AuditLog[]
+  clans               Clan[]
+  clanMembers         ClanMember[]
+  clanWars            ClanWar[]
+  streamNotifications StreamNotification[]
+  guildBackups        GuildBackup[]
+  guildBlacklistUsers GuildBlacklistUser[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([botPresent, memberCount])
+  @@map("guilds")
+}
+
+/// Configuration du module musical
+model MusicSettings {
+  id                     String   @id @default(cuid()) @map("id")
+  guildId                String   @unique @map("guild_id")
+  enabled                Boolean  @default(true) @map("enabled")
+  maxQueueLength         Int      @default(50) @map("max_queue_length")
+  maxPlaylistLength      Int      @default(50) @map("max_playlist_length")
+  defaultVolume          Int      @default(50) @map("default_volume")
+  allowDjRole            Boolean  @default(false) @map("allow_dj_role")
+  djRoleId               String?  @map("dj_role_id")
+  restrictToVoiceChannel Boolean  @default(false) @map("restrict_to_voice_channel")
+  voiceChannelId         String?  @map("voice_channel_id")
+  announceTracks         Boolean  @default(true) @map("announce_tracks")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("music_settings")
+}
+
+/// Configuration générale d'un serveur
+model GuildSettings {
+  id                         String   @id @default(cuid()) @map("id")
+  guildId                    String   @unique @map("guild_id")
+  prefix                     String?  @map("prefix")
+  locale                     String   @default("fr") @map("locale")
+  timezone                   String   @default("Europe/Paris") @map("timezone")
+  modLogChannel              String?  @map("mod_log_channel")
+  modRoleIds                 String   @default("[]") @map("mod_role_ids")
+  adminRoleIds               String   @default("[]") @map("admin_role_ids")
+  muteRoleId                 String?  @map("mute_role_id")
+  dashboardAccessRoles       String   @default("[]") @map("dashboard_access_roles")
+  dashboardModerationAccess  String   @default("[]") @map("dashboard_moderation_access")
+  dashboardTicketsAccess     String   @default("[]") @map("dashboard_tickets_access")
+  dashboardPollsAccess       String   @default("[]") @map("dashboard_polls_access")
+  dashboardSuggestionsAccess String   @default("[]") @map("dashboard_suggestions_access")
+  dashboardGiveawaysAccess   String   @default("[]") @map("dashboard_giveaways_access")
+  dashboardEconomyAccess     String   @default("[]") @map("dashboard_economy_access")
+  dashboardMusicAccess       String   @default("[]") @map("dashboard_music_access")
+  dashboardLevelsAccess      String   @default("[]") @map("dashboard_levels_access")
+  dashboardWelcomeAccess     String   @default("[]") @map("dashboard_welcome_access")
+  dashboardAutorolesAccess   String   @default("[]") @map("dashboard_autoroles_access")
+  dashboardLogsAccess        String   @default("[]") @map("dashboard_logs_access")
+  dashboardProtectionAccess  String   @default("[]") @map("dashboard_protection_access")
+  dashboardAuditAccess       String   @default("[]") @map("dashboard_audit_access")
+  changelogChannel           String?  @map("changelog_channel")
+  suggestionChannelId        String?  @map("suggestion_channel_id")
+  onboardingDone             Boolean  @default(false) @map("onboarding_done")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("guild_settings")
+}
+
+/// Source de découverte lors de l'onboarding
+model OnboardingSource {
+  id        String   @id @default(cuid()) @map("id")
+  guildId   String   @map("guild_id")
+  source    String   @map("source")
+  details   String?  @map("details")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([source])
+  @@index([createdAt])
+  @@map("onboarding_sources")
+}
+
+/// Modules activés ou désactivés sur un serveur
+model ModuleEnabled {
+  id      String @id @default(cuid()) @map("id")
+  guildId String @unique @map("guild_id")
+
+  moderation    Boolean @default(true) @map("moderation")
+  protection    Boolean @default(true) @map("protection")
+  tickets       Boolean @default(true) @map("tickets")
+  logs          Boolean @default(true) @map("logs")
+  levels        Boolean @default(true) @map("levels")
+  economy       Boolean @default(false) @map("economy")
+  music         Boolean @default(true) @map("music")
+  giveaways     Boolean @default(true) @map("giveaways")
+  polls         Boolean @default(true) @map("polls")
+  suggestions   Boolean @default(true) @map("suggestions")
+  welcome       Boolean @default(true) @map("welcome")
+  autoroles     Boolean @default(true) @map("autoroles")
+  embeds        Boolean @default(true) @map("embeds")
+  minigames     Boolean @default(true) @map("minigames")
+  starboard     Boolean @default(false) @map("starboard")
+  forms         Boolean @default(false) @map("forms")
+  clans         Boolean @default(false) @map("clans")
+  notifications Boolean @default(false) @map("notifications")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("modules_enabled")
+}
+
+/// Plateforme de streaming
+enum StreamPlatform {
+  TWITCH
+  YOUTUBE
+
+  @@map("stream_platform")
+}
+
+/// Notification de live Twitch/YouTube configurée sur un serveur
+model StreamNotification {
+  id                 String         @id @default(cuid()) @map("id")
+  guildId            String         @map("guild_id")
+  platform           StreamPlatform @map("platform")
+  channelName        String         @map("channel_name")
+  channelId          String?        @map("channel_id")
+  discordChannelId   String         @map("discord_channel_id")
+  lastLiveAt         DateTime?      @map("last_live_at")
+  isLive             Boolean        @default(false) @map("is_live")
+  lastVideoId        String?        @map("last_video_id")
+  lastLiveId         String?        @map("last_live_id")
+  customTitle        String?        @map("custom_title")
+  customDescription  String?        @map("custom_description")
+  customColor        String?        @map("custom_color")
+  customFooter       String?        @map("custom_footer")
+  mentionRoleId      String?        @map("mention_role_id")
+  pingEveryoneOnLive Boolean        @default(false) @map("ping_everyone_on_live")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, platform, channelName])
+  @@map("stream_notifications")
+}
+
+/// Cas de modération
+model ModerationCase {
+  id          String             @id @default(cuid()) @map("id")
+  guildId     String             @map("guild_id")
+  userId      String             @map("user_id")
+  moderatorId String             @map("moderator_id")
+  type        ModerationCaseType @map("type")
+  reason      String             @map("reason")
+  duration    Int?               @map("duration")
+  expiresAt   DateTime?          @map("expires_at")
+  active      Boolean            @default(true) @map("active")
+  deletedAt   DateTime?          @map("deleted_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [discordId])
+
+  @@index([guildId, userId])
+  @@index([guildId, moderatorId])
+  @@index([guildId, createdAt])
+  @@index([guildId, active, createdAt])
+  @@map("moderation_cases")
+}
+
+/// Avertissements indépendants des cas de modération
+model Warning {
+  id          String   @id @default(cuid()) @map("id")
+  guildId     String   @map("guild_id")
+  userId      String   @map("user_id")
+  moderatorId String   @map("moderator_id")
+  reason      String   @map("reason")
+  active      Boolean  @default(true) @map("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([guildId, userId])
+  @@map("warnings")
+}
+
+/// Ticket de support
+model Ticket {
+  id           String       @id @default(cuid()) @map("id")
+  guildId      String       @map("guild_id")
+  channelId    String       @unique @map("channel_id")
+  creatorId    String       @map("creator_id")
+  categoryId   String?      @map("category_id")
+  subject      String       @map("subject")
+  description  String?      @map("description")
+  status       TicketStatus @default(OPEN) @map("status")
+  claimedById  String?      @map("claimed_by_id")
+  closedById   String?      @map("closed_by_id")
+  closedAt     DateTime?    @map("closed_at")
+  transcriptId String?      @map("transcript_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  guild     Guild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  creator   User            @relation("TicketCreator", fields: [creatorId], references: [discordId])
+  category  TicketCategory? @relation(fields: [categoryId], references: [id])
+  claimedBy User?           @relation("TicketClaims", fields: [claimedById], references: [discordId])
+  claims    TicketClaim[]
+
+  @@index([guildId, status])
+  @@index([guildId, creatorId])
+  @@map("tickets")
+}
+
+/// Réclamation d'un ticket par un membre du staff
+model TicketClaim {
+  id        String   @id @default(cuid()) @map("id")
+  ticketId  String   @map("ticket_id")
+  userId    String   @map("user_id")
+  claimedAt DateTime @default(now()) @map("claimed_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [discordId])
+
+  @@unique([ticketId, userId])
+  @@map("ticket_claims")
+}
+
+/// Catégorie de ticket
+model TicketCategory {
+  id                String   @id @default(cuid()) @map("id")
+  guildId           String   @map("guild_id")
+  name              String   @map("name")
+  description       String?  @map("description")
+  staffRoleIds      String   @default("[]") @map("staff_role_ids")
+  maxTicketsPerUser Int      @default(5) @map("max_tickets_per_user")
+  openingMode       String   @default("BUTTON") @map("opening_mode")
+  formId            String?  @map("form_id")
+  welcomeMessage    String?  @map("welcome_message")
+  color             String   @default("#5865F2") @map("color")
+  emoji             String?  @map("emoji")
+  position          Int      @default(0) @map("position")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  guild   Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  tickets Ticket[]
+
+  @@index([guildId])
+  @@map("ticket_categories")
+}
+
+/// Métadonnées de transcription de ticket
+model TranscriptMeta {
+  id        String   @id @default(cuid()) @map("id")
+  ticketId  String   @unique @map("ticket_id")
+  channelId String   @map("channel_id")
+  guildId   String   @map("guild_id")
+  fileUrl   String?  @map("file_url")
+  content   String?  @map("content")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("transcript_metas")
+}
+
+/// Configuration des logs d'audit
+model LogSettings {
+  id              String   @id @default(cuid()) @map("id")
+  guildId         String   @unique @map("guild_id")
+  logChannelId    String?  @map("log_channel_id")
+  events          String   @default("[]") @map("events")
+  ignoredChannels String   @default("[]") @map("ignored_channels")
+  ignoredRoles    String   @default("[]") @map("ignored_roles")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("log_settings")
+}
+
+/// Configuration du système d'XP et niveaux
+model XPSettings {
+  id                    String   @id @default(cuid()) @map("id")
+  guildId               String   @unique @map("guild_id")
+  enabled               Boolean  @default(true) @map("enabled")
+  xpPerMessageMin       Int      @default(15) @map("xp_per_message_min")
+  xpPerMessageMax       Int      @default(25) @map("xp_per_message_max")
+  voiceXp               Int      @default(10) @map("voice_xp")
+  messageCooldown       Int      @default(60) @map("message_cooldown")
+  voiceCooldown         Int      @default(120) @map("voice_cooldown")
+  levelFormula          String   @default("100 * level * 1.5") @map("level_formula")
+  maxLevel              Int      @default(1000) @map("max_level")
+  ignoredChannels       String   @default("[]") @map("ignored_channels")
+  ignoredRoles          String   @default("[]") @map("ignored_roles")
+  announcementChannelId String?  @map("announcement_channel_id")
+  announcementMessage   String?  @map("announcement_message")
+  xpCurve               String   @default("exponential") @map("xp_curve")
+  xpMultiplier          Float    @default(1.0) @map("xp_multiplier")
+  noXpRoles             String   @default("[]") @map("no_xp_roles")
+  noXpChannels          String   @default("[]") @map("no_xp_channels")
+  boosterRoles          String   @default("[]") @map("booster_roles")
+  boosterChannels       String   @default("[]") @map("booster_channels")
+  xpInThreads           Boolean  @default(true) @map("xp_in_threads")
+  xpInForumPosts        Boolean  @default(true) @map("xp_in_forum_posts")
+  xpVocalMessages       Boolean  @default(false) @map("xp_vocal_messages")
+  showOtherLevels       Boolean  @default(true) @map("show_other_levels")
+  resetOnLeave          Boolean  @default(false) @map("reset_on_leave")
+  resetOnBan            Boolean  @default(false) @map("reset_on_ban")
+  doubleXpLongMessages  Boolean  @default(false) @map("double_xp_long_messages")
+  onlineLeaderboard     Boolean  @default(true) @map("online_leaderboard")
+  discordLeaderboard    Boolean  @default(true) @map("discord_leaderboard")
+  levelColor            String   @default("#14b8a6") @map("level_color")
+  rewardAnnounce        Boolean  @default(true) @map("reward_announce")
+  rewardMessage         String?  @map("reward_message")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("xp_settings")
+}
+
+/// Profil d'XP d'un utilisateur sur un serveur
+model XPProfile {
+  id                  String              @id @default(cuid()) @map("id")
+  guildId             String              @map("guild_id")
+  userId              String              @map("user_id")
+  xp                  Int                 @default(0) @map("xp")
+  level               Int                 @default(0) @map("level")
+  voiceXp             Int                 @default(0) @map("voice_xp")
+  messageCount        Int                 @default(0) @map("message_count")
+  voiceMinutes        Int                 @default(0) @map("voice_minutes")
+  lastMessageAt       DateTime?           @map("last_message_at")
+  lastVoiceAt         DateTime?           @map("last_voice_at")
+  levelUpNotification LevelUpNotification @default(CHANNEL) @map("level_up_notification")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [discordId])
+
+  @@unique([guildId, userId])
+  @@index([guildId, xp])
+  @@index([guildId, level])
+  @@map("xp_profiles")
+}
+
+/// Récompense de rôle liée à un niveau
+model XPRoleReward {
+  id            String   @id @default(cuid()) @map("id")
+  guildId       String   @map("guild_id")
+  roleId        String   @map("role_id")
+  levelRequired Int      @map("level_required")
+  removeOnLevel Boolean  @default(false) @map("remove_on_level")
+  xpMultiplier  Float    @default(1.0) @map("xp_multiplier")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, roleId])
+  @@index([guildId, levelRequired])
+  @@map("xp_role_rewards")
+}
+
+/// Portefeuille économique d'un utilisateur sur un serveur
+model EconomyWallet {
+  id                String    @id @default(cuid()) @map("id")
+  guildId           String    @map("guild_id")
+  userId            String    @map("user_id")
+  wallet            Int       @default(0) @map("wallet")
+  bank              Int       @default(0) @map("bank")
+  totalEarned       Int       @default(0) @map("total_earned")
+  lastDailyAt       DateTime? @map("last_daily_at")
+  lastWeeklyAt      DateTime? @map("last_weekly_at")
+  xpBoostEndsAt     DateTime? @map("xp_boost_ends_at")
+  xpBoostMultiplier Int       @default(2) @map("xp_boost_multiplier")
+  antiTheftEndsAt   DateTime? @map("anti_theft_ends_at")
+  lottoTicketsCount Int       @default(0) @map("lotto_tickets_count")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [discordId])
+
+  @@unique([guildId, userId])
+  @@map("economy_wallets")
+}
+
+/// Transaction économique
+model EconomyTransaction {
+  id          String          @id @default(cuid()) @map("id")
+  guildId     String          @map("guild_id")
+  fromUserId  String?         @map("from_user_id")
+  toUserId    String?         @map("to_user_id")
+  amount      Int             @map("amount")
+  type        TransactionType @map("type")
+  description String?         @map("description")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, fromUserId])
+  @@index([guildId, toUserId])
+  @@index([guildId, createdAt])
+  @@map("economy_transactions")
+}
+
+/// Quête disponible sur un serveur
+model Quest {
+  id              String             @id @default(cuid()) @map("id")
+  guildId         String             @map("guild_id")
+  type            QuestType          @map("type")
+  objectiveType   QuestObjectiveType @map("objective_type")
+  objectiveTarget Int                @map("objective_target")
+  reward          Int                @map("reward")
+  title           String             @map("title")
+  description     String             @map("description")
+  startsAt        DateTime           @map("starts_at")
+  endsAt          DateTime           @map("ends_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  guild    Guild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  progress QuestProgress[]
+
+  @@index([guildId, type])
+  @@index([guildId, startsAt, endsAt])
+  @@map("quests")
+}
+
+/// Progression d'un utilisateur sur une quête
+model QuestProgress {
+  id          String      @id @default(cuid()) @map("id")
+  guildId     String      @map("guild_id")
+  userId      String      @map("user_id")
+  questId     String      @map("quest_id")
+  progress    Int         @default(0) @map("progress")
+  status      QuestStatus @default(ACTIVE) @map("status")
+  completedAt DateTime?   @map("completed_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  quest Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId, questId])
+  @@index([guildId, userId])
+  @@index([questId])
+  @@map("quest_progress")
+}
+
+/// File d'attente musicale
+model MusicQueue {
+  id             String   @id @default(cuid()) @map("id")
+  guildId        String   @unique @map("guild_id")
+  tracks         String   @default("[]") @map("tracks")
+  currentTrack   String?  @map("current_track")
+  position       Int      @default(0) @map("position")
+  loopMode       LoopMode @default(NONE) @map("loop_mode")
+  autoplay       Boolean  @default(false) @map("autoplay")
+  volume         Int      @default(50) @map("volume")
+  voiceChannelId String?  @map("voice_channel_id")
+  textChannelId  String?  @map("text_channel_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("music_queues")
+}
+
+/// Entrée d'historique musical
+model MusicHistoryEntry {
+  id            String   @id @default(cuid()) @map("id")
+  guildId       String   @map("guild_id")
+  trackTitle    String   @map("track_title")
+  trackUrl      String   @map("track_url")
+  duration      Int      @map("duration")
+  requestedById String   @map("requested_by_id")
+  playedAt      DateTime @default(now()) @map("played_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, playedAt])
+  @@map("music_history_entries")
+}
+
+/// Giveaway (concours)
+model Giveaway {
+  id                 String         @id @default(cuid()) @map("id")
+  guildId            String         @map("guild_id")
+  channelId          String         @map("channel_id")
+  messageId          String?        @map("message_id")
+  prize              String         @map("prize")
+  winnerCount        Int            @default(1) @map("winner_count")
+  duration           Int            @map("duration")
+  endsAt             DateTime       @map("ends_at")
+  requiredRoleId     String?        @map("required_role_id")
+  requiredLevel      Int            @default(0) @map("required_level")
+  requiredAccountAge Int            @default(0) @map("required_account_age")
+  status             GiveawayStatus @default(RUNNING) @map("status")
+  winners            String?        @map("winners")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  guild   Guild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  entries GiveawayEntry[]
+
+  @@index([guildId, status])
+  @@map("giveaways")
+}
+
+/// Participation à un giveaway
+model GiveawayEntry {
+  id         String   @id @default(cuid()) @map("id")
+  giveawayId String   @map("giveaway_id")
+  userId     String   @map("user_id")
+  joinedAt   DateTime @default(now()) @map("joined_at")
+
+  giveaway Giveaway @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([giveawayId, userId])
+  @@map("giveaway_entries")
+}
+
+/// Sondage
+model Poll {
+  id          String     @id @default(cuid()) @map("id")
+  guildId     String     @map("guild_id")
+  channelId   String     @map("channel_id")
+  messageId   String?    @map("message_id")
+  question    String     @map("question")
+  options     String     @map("options")
+  status      PollStatus @default(OPEN) @map("status")
+  anonymous   Boolean    @default(false) @map("anonymous")
+  multiChoice Boolean    @default(false) @map("multi_choice")
+  endsAt      DateTime?  @map("ends_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  guild Guild      @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+
+  @@index([guildId, status])
+  @@index([status, endsAt])
+  @@map("polls")
+}
+
+/// Vote dans un sondage
+model PollVote {
+  id          String   @id @default(cuid()) @map("id")
+  pollId      String   @map("poll_id")
+  userId      String?  @map("user_id")
+  optionIndex Int      @map("option_index")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  poll Poll  @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([pollId, userId])
+  @@map("poll_votes")
+}
+
+/// Suggestion
+model Suggestion {
+  id               String           @id @default(cuid()) @map("id")
+  guildId          String           @map("guild_id")
+  channelId        String           @map("channel_id")
+  messageId        String?          @map("message_id")
+  authorId         String           @map("author_id")
+  content          String           @map("content")
+  upvotes          Int              @default(0) @map("upvotes")
+  downvotes        Int              @default(0) @map("downvotes")
+  voters           String           @default("{}") @map("voters")
+  status           SuggestionStatus @default(PENDING) @map("status")
+  staffResponse    String?          @map("staff_response")
+  staffResponderId String?          @map("staff_responder_id")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [discordId])
+
+  @@index([guildId, status])
+  @@map("suggestions")
+}
+
+/// Configuration du message de bienvenue
+model WelcomeSettings {
+  id                      String   @id @default(cuid()) @map("id")
+  guildId                 String   @unique @map("guild_id")
+  enabled                 Boolean  @default(true) @map("enabled")
+  welcomeChannelId        String?  @map("welcome_channel_id")
+  welcomeMessage          String?  @map("welcome_message")
+  welcomeEmbed            Boolean  @default(true) @map("welcome_embed")
+  welcomeEmbedColor       String   @default("#e0e0e0") @map("welcome_embed_color")
+  welcomeEmbedTitle       String?  @map("welcome_embed_title")
+  welcomeEmbedDescription String?  @map("welcome_embed_description")
+  welcomeEmbedFooter      String?  @map("welcome_embed_footer")
+  welcomeEmbedImage       String?  @map("welcome_embed_image")
+  welcomeDM               Boolean  @default(false) @map("welcome_dm")
+  welcomeDMMessage        String?  @map("welcome_dm_message")
+  mentionMember           Boolean  @default(true) @map("mention_member")
+  goodbyeEnabled          Boolean  @default(true) @map("goodbye_enabled")
+  goodbyeChannelId        String?  @map("goodbye_channel_id")
+  goodbyeMessage          String?  @map("goodbye_message")
+  goodbyeEmbed            Boolean  @default(true) @map("goodbye_embed")
+  goodbyeEmbedColor       String   @default("#888888") @map("goodbye_embed_color")
+  cardEnabled             Boolean  @default(false) @map("card_enabled")
+  cardBackground          String   @default("COLOR") @map("card_background")
+  cardBgColor             String   @default("#23272a") @map("card_bg_color")
+  cardBgImage             String?  @map("card_bg_image")
+  cardTextColor           String   @default("#ffffff") @map("card_text_color")
+  cardSubtextColor        String   @default("#b9bbbe") @map("card_subtext_color")
+  cardAccentColor         String   @default("#5865f2") @map("card_accent_color")
+  cardBlurBackground      Boolean  @default(false) @map("card_blur_background")
+  cardText                String   @default("Bienvenue sur {server} !") @map("card_text")
+  cardSubtext             String   @default("Tu es le {memberCount}ème membre") @map("card_subtext")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("welcome_settings")
+}
+
+/// Configuration du module économique
+model EconomySettings {
+  id               String   @id @default(cuid()) @map("id")
+  guildId          String   @unique @map("guild_id")
+  enabled          Boolean  @default(false) @map("enabled")
+  currencyName     String   @default("pièces") @map("currency_name")
+  currencySymbol   String   @default("🪙") @map("currency_symbol")
+  dailyAmount      Int?     @map("daily_amount")
+  weeklyAmount     Int      @default(1000) @map("weekly_amount")
+  startupBalance   Int      @default(100) @map("startup_balance")
+  workMin          Int      @default(10) @map("work_min")
+  workMax          Int      @default(50) @map("work_max")
+  workCooldown     Int      @default(60) @map("work_cooldown")
+  robberyEnabled   Boolean  @default(false) @map("robbery_enabled")
+  robberyMaxAmount Int      @default(500) @map("robbery_max_amount")
+  robberyCooldown  Int      @default(3600) @map("robbery_cooldown")
+  interestRate     Int      @default(5) @map("interest_rate")
+  interestInterval Int      @default(86400) @map("interest_interval")
+  bankCapacity     Int      @default(50000) @map("bank_capacity")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  guild     Guild      @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  shopItems ShopItem[]
+
+  @@map("economy_settings")
+}
+
+/// Article de la boutique économique
+model ShopItem {
+  id                String   @id @default(cuid()) @map("id")
+  economySettingsId String   @map("economy_settings_id")
+  name              String   @map("name")
+  description       String?  @map("description")
+  price             Int      @map("price")
+  type              ItemType @default(ROLE) @map("type")
+  roleId            String?  @map("role_id")
+  duration          Int?     @map("duration")
+  effectValue       Int?     @map("effect_value")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  economySettings  EconomySettings  @relation(fields: [economySettingsId], references: [id], onDelete: Cascade)
+  inventoryEntries InventoryEntry[]
+  marketListings   MarketListing[]
+
+  @@index([economySettingsId])
+  @@map("shop_items")
+}
+
+/// Entrée d'inventaire d'un utilisateur
+model InventoryEntry {
+  id        String   @id @default(cuid()) @map("id")
+  guildId   String   @map("guild_id")
+  userId    String   @map("user_id")
+  itemId    String   @map("item_id")
+  quantity  Int      @default(1) @map("quantity")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  item ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId, itemId])
+  @@index([guildId, userId])
+  @@map("inventory_entries")
+}
+
+/// Statut d'une annonce de marché
+enum MarketListingStatus {
+  ACTIVE
+  SOLD
+  CANCELLED
+  EXPIRED
+}
+
+/// Annonce de marché entre joueurs
+model MarketListing {
+  id        String              @id @default(cuid()) @map("id")
+  guildId   String              @map("guild_id")
+  sellerId  String              @map("seller_id")
+  itemId    String              @map("item_id")
+  price     Int                 @map("price")
+  status    MarketListingStatus @default(ACTIVE) @map("status")
+  buyerId   String?             @map("buyer_id")
+  expiresAt DateTime            @map("expires_at")
+  soldAt    DateTime?           @map("sold_at")
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  item ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, status])
+  @@index([sellerId])
+  @@index([expiresAt])
+  @@map("market_listings")
+}
+
+/// Configuration du module de protection anti-raid/anti-spam
+model ProtectionSettings {
+  id                  String   @id @default(cuid()) @map("id")
+  guildId             String   @unique @map("guild_id")
+  enabled             Boolean  @default(false) @map("enabled")
+  antiRaid            Boolean  @default(false) @map("anti_raid")
+  raidThreshold       Int      @default(10) @map("raid_threshold")
+  raidInterval        Int      @default(10) @map("raid_interval")
+  antiSpam            Boolean  @default(false) @map("anti_spam")
+  spamThreshold       Int      @default(5) @map("spam_threshold")
+  spamInterval        Int      @default(5) @map("spam_interval")
+  antiMassMention     Boolean  @default(false) @map("anti_mass_mention")
+  mentionThreshold    Int      @default(5) @map("mention_threshold")
+  antiLink            Boolean  @default(false) @map("anti_link")
+  antiAlts            Boolean  @default(false) @map("anti_alts")
+  altAccountAge       Int      @default(7) @map("alt_account_age")
+  verificationLevel   String   @default("NONE") @map("verification_level")
+  captchaVerification Boolean  @default(false) @map("captcha_verification")
+  verifiedRoleId      String?  @map("verified_role_id")
+  punishment          String   @default("KICK") @map("punishment")
+  emergencyMode       Boolean  @default(false) @map("emergency_mode")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("protection_settings")
+}
+
+/// Vérification captcha en attente
+model CaptchaVerification {
+  id        String   @id @default(cuid()) @map("id")
+  guildId   String   @map("guild_id")
+  userId    String   @map("user_id")
+  code      String   @map("code")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([guildId, userId])
+  @@index([expiresAt])
+  @@map("captcha_verifications")
+}
+
+/// Configuration des rôles automatiques
+model AutoroleSettings {
+  id         String   @id @default(cuid()) @map("id")
+  guildId    String   @unique @map("guild_id")
+  enabled    Boolean  @default(true) @map("enabled")
+  onJoin     Boolean  @default(true) @map("on_join")
+  onLevelUp  Boolean  @default(false) @map("on_level_up")
+  onReaction Boolean  @default(false) @map("on_reaction")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  guild   Guild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  entries AutoroleEntry[]
+
+  @@map("autorole_settings")
+}
+
+/// Entrée de rôle automatique
+model AutoroleEntry {
+  id                String       @id @default(cuid()) @map("id")
+  settingsId        String       @map("settings_id")
+  guildId           String       @map("guild_id")
+  roleId            String       @map("role_id")
+  type              AutoroleType @map("type")
+  levelRequired     Int?         @map("level_required")
+  reactionChannelId String?      @map("reaction_channel_id")
+  reactionEmoji     String?      @map("reaction_emoji")
+  createdAt         DateTime     @default(now()) @map("created_at")
+
+  settings AutoroleSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  guild    Guild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, type])
+  @@map("autorole_entries")
+}
+
+/// Embed sauvegardé
+model SavedEmbed {
+  id          String   @id @default(cuid()) @map("id")
+  guildId     String   @map("guild_id")
+  name        String   @map("name")
+  title       String?  @map("title")
+  description String?  @map("description")
+  color       String   @default("#e0e0e0") @map("color")
+  fields      String   @default("[]") @map("fields")
+  footer      String?  @map("footer")
+  image       String?  @map("image")
+  thumbnail   String?  @map("thumbnail")
+  authorName  String?  @map("author_name")
+  authorIcon  String?  @map("author_icon")
+  timestamp   Boolean  @default(true) @map("timestamp")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId])
+  @@map("saved_embeds")
+}
+
+/// Plan d'abonnement premium
+model PremiumPlan {
+  id          String   @id @default(cuid()) @map("id")
+  name        String   @unique @map("name")
+  description String   @map("description")
+  price       Int      @map("price")
+  maxGuilds   Int      @default(1) @map("max_guilds")
+  features    String   @default("[]") @map("features")
+  active      Boolean  @default(true) @map("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  subscriptions PremiumSubscription[]
+
+  @@map("premium_plans")
+}
+
+/// Abonnement premium d'un utilisateur
+model PremiumSubscription {
+  id          String             @id @default(cuid()) @map("id")
+  userId      String             @unique @map("user_id")
+  guildId     String?            @unique @map("guild_id")
+  planId      String             @map("plan_id")
+  status      SubscriptionStatus @default(ACTIVE) @map("status")
+  startedAt   DateTime           @default(now()) @map("started_at")
+  expiresAt   DateTime?          @map("expires_at")
+  cancelledAt DateTime?          @map("cancelled_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  user  User        @relation(fields: [userId], references: [id])
+  guild Guild?      @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  plan  PremiumPlan @relation(fields: [planId], references: [id])
+
+  @@index([planId])
+  @@map("premium_subscriptions")
+}
+
+/// Indicateurs de fonctionnalités premium
+model PremiumFeatureFlag {
+  id          String   @id @default(cuid()) @map("id")
+  key         String   @unique @map("key")
+  name        String   @map("name")
+  description String?  @map("description")
+  enabled     Boolean  @default(true) @map("enabled")
+  minTier     String   @default("FREE") @map("min_tier")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("premium_feature_flags")
+}
+
+/// Utilisateur blacklisté
+model BlacklistUser {
+  id          String   @id @default(cuid()) @map("id")
+  targetId    String   @unique @map("target_id")
+  reason      String   @map("reason")
+  moderatorId String   @map("moderator_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("blacklist_users")
+}
+
+/// Serveur blacklisté
+model BlacklistGuild {
+  id          String   @id @default(cuid()) @map("id")
+  guildId     String   @unique @map("guild_id")
+  reason      String   @map("reason")
+  moderatorId String   @map("moderator_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId])
+  @@map("blacklist_guilds")
+}
+
+/// Utilisateur blacklisté au niveau d'un serveur
+model GuildBlacklistUser {
+  id          String   @id @default(cuid()) @map("id")
+  guildId     String   @map("guild_id")
+  userId      String   @map("user_id")
+  reason      String   @map("reason")
+  moderatorId String   @map("moderator_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId])
+  @@index([guildId])
+  @@index([userId])
+  @@map("guild_blacklist_users")
+}
+
+/// Journal des modifications (changelog)
+model Changelog {
+  id        String   @id @default(cuid()) @map("id")
+  title     String   @map("title")
+  content   String   @map("content")
+  version   String?  @map("version")
+  published Boolean  @default(true) @map("published")
+  pinned    Boolean  @default(false) @map("pinned")
+  authorId  String?  @map("author_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  author User? @relation(fields: [authorId], references: [id])
+
+  @@index([createdAt])
+  @@map("changelogs")
+}
+
+/// Déploiement
+model Deployment {
+  id            String            @id @default(cuid()) @map("id")
+  version       String            @map("version")
+  releasePath   String            @map("release_path")
+  environment   DeployEnvironment @default(DEVELOPMENT) @map("environment")
+  // ^ Guard: environnement cible — production refuse les branches non autorisées
+  gitRef        String?           @map("git_ref")
+  // ^ Commit SHA déployé (traçabilité, rollback précis)
+  status        DeploymentStatus  @default(PENDING) @map("status")
+  log           String?           @map("log")
+  triggeredById String            @map("triggered_by_id")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  startedAt     DateTime          @default(now()) @map("started_at")
+  completedAt   DateTime?         @map("completed_at")
+
+  releases DeploymentRelease[]
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([environment])
+  @@map("deployments")
+}
+
+/// Version de déploiement précédente (pour rollback)
+model DeploymentRelease {
+  id           String           @id @default(cuid()) @map("id")
+  version      String           @map("version")
+  releasePath  String           @map("release_path")
+  deploymentId String?          @map("deployment_id")
+  status       DeploymentStatus @map("status")
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  deployment Deployment? @relation(fields: [deploymentId], references: [id])
+
+  @@index([createdAt])
+  @@map("deployment_releases")
+}
+
+/// Journal d'audit
+model AuditLog {
+  id        String      @id @default(cuid()) @map("id")
+  guildId   String?     @map("guild_id")
+  userId    String?     @map("user_id")
+  action    AuditAction @map("action")
+  details   String?     @map("details")
+  ip        String?     @map("ip")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  guild Guild? @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user  User?  @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([guildId, createdAt])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
+/// Journal d'activité des propriétaires
+model OwnerLog {
+  id        String   @id @default(cuid()) @map("id")
+  userId    String   @map("user_id")
+  action    String   @map("action")
+  details   String?  @map("details")
+  ip        String   @map("ip")
+  userAgent String?  @map("user_agent")
+  success   Boolean  @default(true) @map("success")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@map("owner_logs")
+}
+
+/// Instantané de métriques système
+model SystemMetricsSnapshot {
+  id             String   @id @default(cuid()) @map("id")
+  cpuUsage       Float    @map("cpu_usage")
+  ramUsage       Float    @map("ram_usage")
+  ramTotal       Float    @map("ram_total")
+  uptimeSeconds  Int      @map("uptime_seconds")
+  guildCount     Int      @map("guild_count")
+  userCount      Int      @map("user_count")
+  commandCount   Int      @map("command_count")
+  messagesToday  Int      @map("messages_today")
+  activeChannels Int      @map("active_channels")
+  onlineMembers  Int      @map("online_members")
+  timestamp      DateTime @default(now()) @map("timestamp")
+
+  @@index([timestamp])
+  @@map("system_metrics_snapshots")
+}
+
+/// Interrupteur global de fonctionnalités / Événements temporaires
+model FeatureFlag {
+  id          String    @id @default(cuid()) @map("id")
+  key         String    @unique @map("key")
+  name        String    @map("name")
+  description String?   @map("description")
+  enabled     Boolean   @default(false) @map("enabled")
+  startsAt    DateTime? @map("starts_at")
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([key, enabled, startsAt, expiresAt])
+  @@map("feature_flags")
+}
+
+/// Paramètres auto-modération
+model AutoModSettings {
+  id                    String   @id @default(cuid()) @map("id")
+  guildId               String   @unique @map("guild_id")
+  bannedWords           Boolean  @default(false) @map("banned_words")
+  bannedWordsList       String   @default("[]") @map("banned_words_list")
+  discordInvites        Boolean  @default(false) @map("discord_invites")
+  externalLinks         Boolean  @default(false) @map("external_links")
+  excessiveCaps         Boolean  @default(false) @map("excessive_caps")
+  capsThreshold         Int      @default(70) @map("caps_threshold")
+  excessiveEmojis       Boolean  @default(false) @map("excessive_emojis")
+  emojisThreshold       Int      @default(10) @map("emojis_threshold")
+  excessiveMentions     Boolean  @default(false) @map("excessive_mentions")
+  mentionsThreshold     Int      @default(5) @map("mentions_threshold")
+  forbiddenPings        Boolean  @default(false) @map("forbidden_pings")
+  forbiddenPingRoles    String   @default("[]") @map("forbidden_ping_roles")
+  messageSpam           Boolean  @default(false) @map("message_spam")
+  spamThreshold         Int      @default(5) @map("spam_threshold")
+  spamInterval          Int      @default(5) @map("spam_interval")
+  forbiddenMarkdown     Boolean  @default(false) @map("forbidden_markdown")
+  forbiddenMarkdownList String   @default("[]") @map("forbidden_markdown_list")
+  warnEnabled           Boolean  @default(true) @map("warn_enabled")
+  muteEnabled           Boolean  @default(false) @map("mute_enabled")
+  muteDuration          Int      @default(10) @map("mute_duration")
+  kickEnabled           Boolean  @default(false) @map("kick_enabled")
+  banEnabled            Boolean  @default(false) @map("ban_enabled")
+  autoSanctionThreshold Int      @default(3) @map("auto_sanction_threshold")
+  autoWarnMuteThreshold Int?     @map("auto_warn_mute_threshold")
+  autoWarnBanThreshold  Int?     @map("auto_warn_ban_threshold")
+  autoWarnMuteDuration  Int      @default(60) @map("auto_warn_mute_duration")
+  whitelistRoles        String   @default("[]") @map("whitelist_roles")
+  whitelistChannels     String   @default("[]") @map("whitelist_channels")
+  logChannelId          String?  @map("log_channel_id")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("auto_mod_settings")
+}
+
+/// Paramètres du module tickets
+model TicketSettings {
+  id                     String   @id @default(cuid()) @map("id")
+  guildId                String   @unique @map("guild_id")
+  enabled                Boolean  @default(false) @map("enabled")
+  categoryId             String?  @map("category_id")
+  logChannelId           String?  @map("log_channel_id")
+  validationChannelId    String?  @map("validation_channel_id")
+  transcriptChannelId    String?  @map("transcript_channel_id")
+  requireValidation      Boolean  @default(false) @map("require_validation")
+  requireOpenReason      Boolean  @default(false) @map("require_open_reason")
+  requireCloseReason     Boolean  @default(false) @map("require_close_reason")
+  channelFormat          String   @default("ticket-{username}") @map("channel_format")
+  moderatorRoles         String   @default("[]") @map("moderator_roles")
+  accessRoles            String   @default("[]") @map("access_roles")
+  mentionModerators      Boolean  @default(true) @map("mention_moderators")
+  maxOpenPerUser         Int      @default(1) @map("max_open_per_user")
+  autoDelete             Boolean  @default(false) @map("auto_delete")
+  inactivityAlertHours   Int      @default(24) @map("inactivity_alert_hours")
+  welcomeMessageNoReason String   @default("Un membre de l'équipe va te répondre sous peu.") @map("welcome_message_no_reason")
+  transcriptFormat       String   @default("HTML") @map("transcript_format")
+  openMessage            String   @default("Bienvenue ! Décris ton problème.") @map("open_message")
+  panelMessage           String   @default("Cliquez sur le bouton ci-dessous pour ouvrir un ticket de support.\nNotre équipe vous répondra dès que possible.") @map("panel_message")
+  panelButtonText        String   @default("Ouvrir un ticket") @map("panel_button_text")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_settings")
+}
+
+/// Membre autorisé d'un serveur (owner ou admin avec MANAGE_GUILD)
+model GuildMember {
+  id          String   @id @default(cuid()) @map("id")
+  guildId     String   @map("guild_id")
+  userId      String   @map("user_id")
+  permissions String   @default("0") @map("permissions")
+  isOwner     Boolean  @default(false) @map("is_owner")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId])
+  @@index([userId])
+  @@map("guild_members")
+}
+
+/// Donateur du projet
+model Donor {
+  id         String   @id @default(cuid()) @map("id")
+  userId     String   @unique @map("user_id")
+  username   String   @map("username")
+  avatarUrl  String?  @map("avatar_url")
+  amount     Float    @default(0) @map("amount")
+  message    String?  @map("message")
+  isPublic   Boolean  @default(true) @map("is_public")
+  isDonor    Boolean  @default(true) @map("is_donor")
+  embedColor String?  @map("embed_color")
+  donatedAt  DateTime @default(now()) @map("donated_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("donors")
+}
+
+/// Note interne du propriétaire
+model OwnerNote {
+  id        String   @id @default(cuid()) @map("id")
+  content   String   @default("") @map("content")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("owner_notes")
+}
+
+/// Popup de notification broadcasté à un utilisateur ou globalement
+model PendingPopup {
+  id           String   @id @default(cuid()) @map("id")
+  targetUserId String?  @map("target_user_id")
+  message      String   @map("message")
+  duration     Int      @map("duration")
+  createdAt    DateTime @default(now()) @map("created_at")
+  expiresAt    DateTime @map("expires_at")
+
+  @@index([targetUserId])
+  @@index([expiresAt])
+  @@map("pending_popups")
+}
+
+/// Paramètres des minijeux pour un serveur
+model MinigameSettings {
+  id                    String   @id @default(cuid()) @map("id")
+  guildId               String   @unique @map("guild_id")
+  enabled               Boolean  @default(true) @map("enabled")
+  gamesChannelId        String?  @map("games_channel_id")
+  betMin                Int      @default(10) @map("bet_min")
+  betMax                Int      @default(1000) @map("bet_max")
+  blackjackReward       Int      @default(150) @map("blackjack_reward")
+  rpsReward             Int      @default(50) @map("rps_reward")
+  morpionReward         Int      @default(100) @map("morpion_reward")
+  guessReward           Int      @default(200) @map("guess_reward")
+  guessRange            Int      @default(100) @map("guess_range")
+  hangmanReward         Int      @default(150) @map("hangman_reward")
+  hangmanWordCategories String   @default("{}") @map("hangman_word_categories")
+  connect4Reward        Int      @default(200) @map("connect4_reward")
+  pokerReward           Int      @default(300) @map("poker_reward")
+  horseRaceReward       Int      @default(250) @map("horse_race_reward")
+  slotMachineReward     Int      @default(500) @map("slot_machine_reward")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  guild    Guild             @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  sessions MinigameSession[]
+
+  @@map("minigame_settings")
+}
+
+/// Historique des jackpots gagnés
+model JackpotWin {
+  id        String   @id @default(cuid()) @map("id")
+  guildId   String   @map("guild_id")
+  userId    String   @map("user_id")
+  bet       Int      @map("bet")
+  payout    Int      @map("payout")
+  symbols   String   @map("symbols")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([guildId, createdAt])
+  @@map("jackpot_wins")
+}
+
+/// Session de minijeu actif
+model MinigameSession {
+  id         String   @id @default(cuid()) @map("id")
+  guildId    String   @map("guild_id")
+  userId     String   @map("user_id")
+  gameType   String   @map("game_type")
+  bet        Int      @default(0) @map("bet")
+  payout     Int      @default(0) @map("payout")
+  status     String   @default("active") @map("status")
+  gameState  String?  @map("game_state")
+  opponentId String?  @map("opponent_id")
+  channelId  String   @map("channel_id")
+  messageId  String?  @map("message_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  settings MinigameSettings @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@index([guildId, userId])
+  @@index([gameType, status])
+  @@map("minigame_sessions")
+}
+
+/// Rôle dans un clan
+enum ClanRole {
+  OWNER
+  OFFICER
+  MEMBER
+}
+
+/// Statut d'une guerre de clans
+enum ClanWarStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+/// Clan / équipe
+model Clan {
+  id          String   @id @default(cuid()) @map("id")
+  guildId     String   @map("guild_id")
+  name        String   @map("name")
+  ownerId     String   @map("owner_id")
+  description String?  @map("description")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  guild            Guild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  members          ClanMember[]
+  warsAsChallenger ClanWar[]    @relation("ChallengerClan")
+  warsAsOpponent   ClanWar[]    @relation("OpponentClan")
+
+  @@unique([guildId, name])
+  @@index([guildId])
+  @@map("clans")
+}
+
+/// Membre d'un clan
+model ClanMember {
+  id       String   @id @default(cuid()) @map("id")
+  clanId   String   @map("clan_id")
+  guildId  String   @map("guild_id")
+  userId   String   @map("user_id")
+  role     ClanRole @default(MEMBER) @map("role")
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  clan  Clan  @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId])
+  @@index([clanId])
+  @@index([guildId, userId])
+  @@map("clan_members")
+}
+
+/// Guerre entre deux clans
+model ClanWar {
+  id           String        @id @default(cuid()) @map("id")
+  guildId      String        @map("guild_id")
+  challengerId String        @map("challenger_id")
+  opponentId   String        @map("opponent_id")
+  status       ClanWarStatus @default(PENDING) @map("status")
+  startedAt    DateTime?     @map("started_at")
+  endsAt       DateTime?     @map("ends_at")
+  challengerXp Int           @default(0) @map("challenger_xp")
+  opponentXp   Int           @default(0) @map("opponent_xp")
+  winnerId     String?       @map("winner_id")
+  prizePool    Int           @default(0) @map("prize_pool")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  guild      Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  challenger Clan  @relation("ChallengerClan", fields: [challengerId], references: [id], onDelete: Cascade)
+  opponent   Clan  @relation("OpponentClan", fields: [opponentId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, status])
+  @@index([challengerId])
+  @@index([opponentId])
+  @@map("clan_wars")
+}
+
+/// Paramètres du starboard pour un serveur
+model StarboardSettings {
+  id        String   @id @default(cuid()) @map("id")
+  guildId   String   @unique @map("guild_id")
+  enabled   Boolean  @default(false) @map("enabled")
+  channelId String?  @map("channel_id")
+  starEmoji String   @default("⭐") @map("star_emoji")
+  minStars  Int      @default(3) @map("min_stars")
+  selfStar  Boolean  @default(false) @map("self_star")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  guild   Guild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  entries StarboardEntry[]
+
+  @@map("starboard_settings")
+}
+
+/// Entrée du starboard
+model StarboardEntry {
+  id          String   @id @default(cuid()) @map("id")
+  guildId     String   @map("guild_id")
+  originalId  String   @map("original_id")
+  starboardId String?  @unique @map("starboard_id")
+  authorId    String   @map("author_id")
+  starCount   Int      @default(0) @map("star_count")
+  content     String   @map("content")
+  attachment  String?  @map("attachment")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  settings StarboardSettings @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@unique([guildId, originalId])
+  @@index([guildId, starCount])
+  @@map("starboard_entries")
+}
+
+/// Paramètres des formulaires pour un serveur
+model FormSettings {
+  id         String   @id @default(cuid()) @map("id")
+  guildId    String   @unique @map("guild_id")
+  enabled    Boolean  @default(false) @map("enabled")
+  channelId  String?  @map("channel_id")
+  logChannel String?  @map("log_channel")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  guild       Guild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  templates   FormTemplate[]
+  submissions FormSubmission[]
+
+  @@map("form_settings")
+}
+
+/// Modèle de formulaire personnalisé
+model FormTemplate {
+  id          String   @id @default(cuid()) @map("id")
+  guildId     String   @map("guild_id")
+  name        String   @map("name")
+  description String?  @map("description")
+  fields      String   @map("fields")
+  enabled     Boolean  @default(true) @map("enabled")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  settings FormSettings @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@index([guildId, enabled])
+  @@map("form_templates")
+}
+
+/// Soumission de formulaire
+model FormSubmission {
+  id         String    @id @default(cuid()) @map("id")
+  guildId    String    @map("guild_id")
+  templateId String    @map("template_id")
+  userId     String    @map("user_id")
+  responses  String    @map("responses")
+  status     String    @default("pending") @map("status")
+  reviewedBy String?   @map("reviewed_by")
+  reviewedAt DateTime? @map("reviewed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  settings FormSettings @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@index([guildId, status])
+  @@index([templateId])
+  @@map("form_submissions")
+}
+
+/// Suivi des invitations
+model InviteTrack {
+  id         String    @id @default(cuid()) @map("id")
+  guildId    String    @map("guild_id")
+  inviterId  String    @map("inviter_id")
+  inviteCode String    @map("invite_code")
+  joinedId   String    @map("joined_id")
+  joinedAt   DateTime  @default(now()) @map("joined_at")
+  isFake     Boolean   @default(false) @map("is_fake")
+  hasLeft    Boolean   @default(false) @map("has_left")
+  leftAt     DateTime? @map("left_at")
+
+  @@index([guildId, inviterId])
+  @@index([guildId, joinedId])
+  @@index([inviterId])
+  @@map("invite_tracks")
+}
+
+/// Sauvegarde des salons et rôles d'un serveur
+model GuildBackup {
+  id           String   @id @default(cuid()) @map("id")
+  guildId      String   @map("guild_id")
+  name         String   @map("name")
+  data         String   @map("data")
+  channelCount Int      @default(0) @map("channel_count")
+  roleCount    Int      @default(0) @map("role_count")
+  size         Float    @default(0) @map("size")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId])
+  @@map("guild_backups")
+}
+
+/// Fenêtre de maintenance planifiée
+model MaintenanceWindow {
+  id        String   @id @default(cuid()) @map("id")
+  message   String   @map("message")
+  startsAt  DateTime @map("starts_at")
+  endsAt    DateTime @map("ends_at")
+  active    Boolean  @default(false) @map("active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([active, endsAt])
+  @@map("maintenance_windows")
+}
+
+/// Configuration de la carte de rang personnalisée
+model RankCardSettings {
+  id                String   @id @default(cuid()) @map("id")
+  guildId           String   @unique @map("guild_id")
+  backgroundType    String   @default("COLOR") @map("background_type")
+  backgroundColor   String   @default("#23272a") @map("background_color")
+  backgroundImage   String?  @map("background_image")
+  gradientFrom      String   @default("#23272a") @map("gradient_from")
+  gradientTo        String   @default("#2c2f33") @map("gradient_to")
+  xpBarColor        String   @default("#5865f2") @map("xp_bar_color")
+  xpBarBackground   String   @default("#4f545c") @map("xp_bar_background")
+  textColor         String   @default("#ffffff") @map("text_color")
+  avatarBorder      Boolean  @default(true) @map("avatar_border")
+  avatarBorderColor String   @default("#5865f2") @map("avatar_border_color")
+  fontFamily        String   @default("Sans-serif") @map("font_family")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("rank_card_settings")
+}
+
+/// Cooldown persistant des commandes (survit aux redémarrages)
+model CommandCooldown {
+  id          String   @id @default(cuid()) @map("id")
+  userId      String   @map("user_id")
+  commandName String   @map("command_name")
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, commandName])
+  @@index([expiresAt])
+  @@map("command_cooldowns")
+}
+
+/// Métrique globale persistante du bot (clé/valeur)
+model BotMetric {
+  id        String   @id @default(cuid()) @map("id")
+  key       String   @unique @map("key")
+  value     BigInt   @default(0) @map("value")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("bot_metrics")
+}
+
+/// Replay store for POSTs sent with an Idempotency-Key (dangerous owner actions).
+/// `status` is null while the first request is still running.
+model IdempotencyRecord {
+  id          String   @id
+  userId      String   @map("user_id")
+  fingerprint String
+  status      Int?
+  response    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  expiresAt   DateTime @default(dbgenerated("CURRENT_TIMESTAMP + INTERVAL '24 hours'")) @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}

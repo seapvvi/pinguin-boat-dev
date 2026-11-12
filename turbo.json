@@ -1,0 +1,46 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local", "tsconfig.json"],
+  "globalEnv": [
+    "NODE_ENV",
+    "DATABASE_URL",
+    "DATABASE_CONNECTION_LIMIT",
+    "DATABASE_POOL_TIMEOUT",
+    "NEXT_PUBLIC_API_URL",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_SITE_URL"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "dist/**", "!.next/cache/**"],
+      "env": ["NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_SITE_URL"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "outputs": []
+    },
+    "typecheck": {
+      "outputs": []
+    },
+    "clean": {
+      "cache": false
+    },
+    "db:generate": {
+      "cache": false
+    },
+    "db:push": {
+      "cache": false
+    },
+    "db:migrate": {
+      "cache": false
+    },
+    "test": {
+      "outputs": ["coverage/**"],
+      "cache": false
+    }
+  }
+}

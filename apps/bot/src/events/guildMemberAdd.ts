@@ -1,0 +1,184 @@
+import { GuildMember, Client, AttachmentBuilder, EmbedBuilder } from 'discord.js';
+import { prisma } from '@pinguin/db';
+import { logger } from '@pinguin/shared';
+import { handleMemberJoin } from '../services/protection';
+import { isModuleEnabled } from '../guards/module';
+import { sendGuildLog } from '../services/logs';
+import { findUsedInvite, getCachedInvites, setGuildInvites } from '../services/invite-cache';
+import { generateCard } from '../services/WelcomeCardService';
+import type { InviteData } from '../services/invite-cache';
+
+export const name = 'guildMemberAdd';
+
+export async function execute(member: GuildMember, client: Client): Promise<void> {
+  if (member.user.bot) return;
+  const guildId = member.guild.id;
+
+  await sendGuildLog(
+    client,
+    guildId,
+    'MEMBER_JOIN',
+    new EmbedBuilder({
+      title: '👋 Membre rejoint',
+      color: 0x00ff88,
+      description: `${member.user.username} (\`${member.id}\`)`,
+      thumbnail: { url: member.user.displayAvatarURL() },
+      timestamp: new Date().toISOString(),
+    })
+  );
+
+  await handleMemberJoin(member);
+
+  const welcomeEnabled = await isModuleEnabled(guildId, 'welcome');
+  if (welcomeEnabled) {
+    const welcome = await prisma.welcomeSettings.findUnique({ where: { guildId } });
+    if (welcome?.enabled) {
+      let inviterName = 'quelqu\'un';
+      let inviterId: string | null = null;
+
+      try {
+        // 1. Lire le cache actuel AVANT tout rafraîchissement
+        const previousInvites = getCachedInvites(guildId);
+
+        // 2. Récupérer les invites live depuis Discord
+        const currentInvites = await member.guild.invites.fetch();
+        const currentInvitesMap = new Map<string, InviteData>();
+
+        for (const invite of currentInvites.values()) {
+          currentInvitesMap.set(invite.code, {
+            uses: invite.uses,
+            inviterId: invite.inviterId,
+          });
+        }
+
+        // 3. Trouver l'invite utilisée par comparaison (ancien cache vs nouvelles valeurs)
+        const usedInvite = findUsedInvite(previousInvites, currentInvitesMap);
+
+        // 4. Mettre à jour le cache avec les nouvelles valeurs
+        setGuildInvites(guildId, currentInvitesMap);
+
+        if (usedInvite) {
+          inviterId = usedInvite.inviterId;
+          if (inviterId) {
+            const inviter = await member.guild.members.fetch(inviterId).catch(() => null);
+            if (inviter) {
+              inviterName = inviter.user.username;
+            }
+            // Persister l'invitation dans la base de données
+            await prisma.inviteTrack.create({
+              data: {
+                guildId,
+                inviterId,
+                inviteCode: usedInvite.code,
+                joinedId: member.id,
+                joinedAt: new Date(),
+              },
+            }).catch((err) => logger.warn(`[guildMemberAdd] Échec création InviteTrack pour ${member.id}`, { err: err instanceof Error ? err.message : String(err) }));
+          }
+        } else {
+          // Cas edge: vanity URL
+          const vanityData = await member.guild.fetchVanityData().catch(() => null);
+          if (vanityData && vanityData.uses) {
+            inviterName = 'vanity URL';
+          }
+        }
+      } catch (error) {
+        // Fallback: essayer les audit logs si le cache échoue
+        try {
+          const logs = await member.guild.fetchAuditLogs({ limit: 1, type: 28 });
+          const entry = logs.entries.first();
+          if (entry?.executor && !entry.executor.bot) {
+            inviterName = entry.executor.username ?? "quelqu'un";
+            inviterId = entry.executor.id;
+            // Persister l'invitation depuis les audit logs
+            if (inviterId) {
+              await prisma.inviteTrack.create({
+                data: {
+                  guildId,
+                  inviterId,
+                  inviteCode: 'audit_log',
+                  joinedId: member.id,
+                  joinedAt: new Date(),
+                },
+              }).catch((err) => logger.warn(`[guildMemberAdd] Échec création InviteTrack (audit) pour ${member.id}`, { err: err instanceof Error ? err.message : String(err) }));
+            }
+          }
+        } catch {
+          /* audit log indisponible */
+        }
+      }
+
+      const replacements = (s: string) => s
+            .replace(/\{user\}/gi, member.displayName)
+            .replace(/\{username\}/gi, member.user.username)
+            .replace(/\{server\}/gi, member.guild.name)
+            .replace(/\{members\}/gi, String(member.guild.memberCount))
+            .replace(/\{count\}/gi, String(member.guild.memberCount))
+            .replace(/\{inviter\}/gi, inviterName);
+
+      if (welcome.welcomeChannelId) {
+        const channel = member.guild.channels.cache.get(welcome.welcomeChannelId);
+        if (channel?.isTextBased()) {
+          const mention = welcome.mentionMember !== false ? `${member} ` : '';
+
+          // Carte de bienvenue Canvas
+          if (welcome.cardEnabled) {
+            try {
+              const cardBuffer = await generateCard(member, welcome);
+              const attachment = new AttachmentBuilder(cardBuffer, { name: 'welcome.png' });
+              await channel.send({ content: mention || undefined, files: [attachment] }).catch((err) => logger.warn(`[guildMemberAdd] Échec envoi carte bienvenue dans ${channel.id} pour ${member.id}`, { err: err instanceof Error ? err.message : String(err) }));
+            } catch (err) {
+              logger.warn(`[guildMemberAdd] Échec génération carte bienvenue pour ${member.id}`, { err: err instanceof Error ? err.message : String(err) });
+            }
+          } else if (welcome.welcomeEmbed) {
+            const embed = new EmbedBuilder()
+              .setColor((welcome.welcomeEmbedColor || '#00FF00') as `#${string}`);
+
+            if (welcome.welcomeEmbedTitle) embed.setTitle(replacements(welcome.welcomeEmbedTitle));
+            if (welcome.welcomeEmbedDescription) {
+              embed.setDescription(replacements(welcome.welcomeEmbedDescription));
+            } else if (welcome.welcomeMessage) {
+              embed.setDescription(replacements(welcome.welcomeMessage));
+            }
+            if (welcome.welcomeEmbedFooter) embed.setFooter({ text: replacements(welcome.welcomeEmbedFooter) });
+            if (welcome.welcomeEmbedImage) embed.setImage(welcome.welcomeEmbedImage);
+
+            await channel.send({ content: mention || undefined, embeds: [embed] }).catch((err) => logger.warn(`[guildMemberAdd] Échec envoi embed bienvenue dans ${channel.id} pour ${member.id}`, { err: err instanceof Error ? err.message : String(err) }));
+          } else {
+            const msg = welcome.welcomeMessage
+              ? replacements(welcome.welcomeMessage)
+              : `Bienvenue ${member.displayName} sur **${member.guild.name}** !`;
+            await channel.send({ content: `${member} ${msg}` }).catch((err) => logger.warn(`[guildMemberAdd] Échec envoi message bienvenue dans ${channel.id} pour ${member.id}`, { err: err instanceof Error ? err.message : String(err) }));
+          }
+        }
+      }
+
+      if (welcome.welcomeDM) {
+        const dmMsg = (welcome.welcomeDMMessage || `Bienvenue sur **${member.guild.name}**, ${member.user.username} !`)
+          .replace(/\{user\}/gi, member.displayName)
+          .replace(/\{username\}/gi, member.user.username)
+          .replace(/\{server\}/gi, member.guild.name)
+          .replace(/\{members\}/gi, String(member.guild.memberCount))
+          .replace(/\{count\}/gi, String(member.guild.memberCount))
+          .replace(/\{inviter\}/gi, inviterName);
+        await member.send(dmMsg).catch((err) => logger.warn(`[guildMemberAdd] Échec envoi DM bienvenue à ${member.id}`, { err: err instanceof Error ? err.message : String(err) }));
+      }
+    }
+  }
+
+  const autorolesEnabled = await isModuleEnabled(guildId, 'autoroles');
+  if (autorolesEnabled) {
+    const ar = await prisma.autoroleSettings.findUnique({ where: { guildId }, include: { entries: true } });
+    if (ar?.enabled && ar.onJoin) {
+      const joinRoles = ar.entries.filter((e) => e.type === 'JOIN');
+      for (const entry of joinRoles) {
+        if (member.roles.cache.has(entry.roleId)) continue;
+        const role = member.guild.roles.cache.get(entry.roleId);
+        if (!role) continue;
+        const botMember = member.guild.members.me;
+        if (!botMember || role.position >= botMember.roles.highest.position) continue;
+        await member.roles.add(entry.roleId, 'Auto-rôle à l\'arrivée').catch((err) => logger.warn(`[guildMemberAdd] Échec ajout rôle ${entry.roleId} à ${member.id}`, { err: err instanceof Error ? err.message : String(err) }));
+      }
+    }
+  }
+}

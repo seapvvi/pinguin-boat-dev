@@ -1,0 +1,510 @@
+import { getConfig } from '@pinguin/config';
+import { getCache, setCache, invalidateCache } from '../utils/cache';
+import { DISCORD_PERMISSIONS, hasDiscordPermission, canManageGuild } from '@pinguin/shared';
+
+const config = getConfig();
+const API_BASE = 'https://discord.com/api/v10';
+
+interface DiscordTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  refresh_token: string;
+  scope: string;
+}
+
+interface DiscordUser {
+  id: string;
+  username: string;
+  discriminator: string;
+  global_name: string | null;
+  avatar: string | null;
+  email: string | null;
+  locale: string;
+  verified: boolean;
+}
+
+export interface DiscordGuild {
+  id: string;
+  name: string;
+  icon: string | null;
+  owner: boolean;
+  permissions: string;
+  features: string[];
+}
+
+export interface DiscordBotGuild {
+  id: string;
+  name: string;
+  icon: string | null;
+  owner: boolean;
+  permissions: string;
+  features: string[];
+}
+
+const DISCORD_MAX_CONCURRENT = 5;
+const DISCORD_MAX_RETRIES = 3;
+const DISCORD_TIMEOUT_MS = 10_000;
+const CIRCUIT_FAILURE_THRESHOLD = 5;
+const CIRCUIT_COOLDOWN_MS = 30_000;
+
+let activeRequests = 0;
+const waiting: Array<() => void> = [];
+let consecutiveFailures = 0;
+let circuitOpenUntil = 0;
+
+function acquireSlot(): Promise<void> {
+  if (activeRequests < DISCORD_MAX_CONCURRENT) {
+    activeRequests += 1;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    waiting.push(() => {
+      activeRequests += 1;
+      resolve();
+    });
+  });
+}
+
+function releaseSlot(): void {
+  activeRequests -= 1;
+  const next = waiting.shift();
+  if (next) next();
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Exponential backoff with jitter so parallel callers do not retry in lockstep. */
+function backoffMs(attempt: number): number {
+  return Math.min(5_000, 250 * 2 ** attempt) * (0.75 + Math.random() * 0.5);
+}
+
+function circuitIsOpen(): boolean {
+  return Date.now() < circuitOpenUntil;
+}
+
+function recordSuccess(): void {
+  consecutiveFailures = 0;
+  circuitOpenUntil = 0;
+}
+
+function recordFailure(): void {
+  consecutiveFailures += 1;
+  if (consecutiveFailures >= CIRCUIT_FAILURE_THRESHOLD) {
+    circuitOpenUntil = Date.now() + CIRCUIT_COOLDOWN_MS;
+    consecutiveFailures = 0;
+  }
+}
+
+/** Test/maintenance helper: reset the Discord circuit breaker. */
+export function resetDiscordCircuit(): void {
+  consecutiveFailures = 0;
+  circuitOpenUntil = 0;
+}
+
+export function isDiscordCircuitOpen(): boolean {
+  return circuitIsOpen();
+}
+
+async function discordFetch<T>(
+  endpoint: string,
+  options: RequestInit = {},
+  attempt = 0
+): Promise<T> {
+  if (circuitIsOpen()) {
+    throw new Error('Discord API temporairement indisponible (circuit ouvert)');
+  }
+
+  const url = `${API_BASE}${endpoint}`;
+  await acquireSlot();
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DISCORD_TIMEOUT_MS);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+        },
+        signal: options.signal ?? controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    // Discord replies with 429 + Retry-After (seconds) per route bucket. Wait
+    // it out with jitter and retry instead of failing the dashboard request.
+    if (response.status === 429) {
+      const retryAfter = Number(response.headers.get('Retry-After'));
+      const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : backoffMs(attempt);
+
+      if (attempt < DISCORD_MAX_RETRIES) {
+        await sleep(waitMs * (0.8 + Math.random() * 0.4));
+        return discordFetch<T>(endpoint, options, attempt + 1);
+      }
+
+      recordFailure();
+      throw new Error(`Discord API 429 after ${DISCORD_MAX_RETRIES} retries`);
+    }
+
+    if (response.status >= 500) {
+      if (attempt < DISCORD_MAX_RETRIES) {
+        await sleep(backoffMs(attempt));
+        return discordFetch<T>(endpoint, options, attempt + 1);
+      }
+      recordFailure();
+      const text = await response.text();
+      throw new Error(`Discord API error ${response.status}: ${text.slice(0, 200)}`);
+    }
+
+    if (!response.ok) {
+      // 4xx (other than 429) is a caller problem, not an outage: do not open
+      // the circuit for it.
+      const text = await response.text();
+      throw new Error(
+        `Discord API error ${response.status}: ${text.slice(0, 200)}`
+      );
+    }
+
+    recordSuccess();
+    return response.json() as Promise<T>;
+  } finally {
+    releaseSlot();
+  }
+}
+
+export async function exchangeCode(code: string, redirectUri: string): Promise<DiscordTokenResponse> {
+  const data = new URLSearchParams({
+    client_id: config.DISCORD_CLIENT_ID,
+    client_secret: config.DISCORD_CLIENT_SECRET,
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: redirectUri,
+  });
+
+  const response = await fetch(`${API_BASE}/oauth2/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: data.toString(),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Échec d'échange du code OAuth2: ${text.slice(0, 200)}`);
+  }
+
+  return response.json() as Promise<DiscordTokenResponse>;
+}
+
+export async function refreshDiscordToken(refreshToken: string): Promise<DiscordTokenResponse> {
+  const data = new URLSearchParams({
+    client_id: config.DISCORD_CLIENT_ID,
+    client_secret: config.DISCORD_CLIENT_SECRET,
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+  });
+
+  const response = await fetch(`${API_BASE}/oauth2/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: data.toString(),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Échec du rafraîchissement du token OAuth2: ${text.slice(0, 200)}`);
+  }
+
+  return response.json() as Promise<DiscordTokenResponse>;
+}
+
+export async function getUser(accessToken: string): Promise<DiscordUser> {
+  return discordFetch<DiscordUser>('/users/@me', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export async function getUserGuilds(
+  accessToken: string
+): Promise<DiscordGuild[]> {
+  return discordFetch<DiscordGuild[]>('/users/@me/guilds', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export async function getBotGuilds(): Promise<DiscordBotGuild[]> {
+  const allGuilds: DiscordBotGuild[] = [];
+  let after: string | undefined;
+
+  while (true) {
+    let endpoint = '/users/@me/guilds?limit=200';
+    if (after) endpoint += `&after=${after}`;
+
+    const batch = await discordFetch<DiscordBotGuild[]>(endpoint, {
+      headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    });
+
+    allGuilds.push(...batch);
+    if (batch.length < 200) break;
+
+    const last = batch[batch.length - 1];
+    after = last.id;
+  }
+
+  return allGuilds;
+}
+
+export async function getBotGuild(id: string): Promise<DiscordBotGuild | null> {
+  try {
+    return await discordFetch<DiscordBotGuild>(`/guilds/${id}`, {
+      headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function getGuildChannels(guildId: string): Promise<any[]> {
+  const cacheKey = `channels:${guildId}`;
+  const cached = getCache<any[]>(cacheKey);
+  if (cached) return cached;
+  const channels = await discordFetch<any[]>(`/guilds/${guildId}/channels`, {
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+  });
+  setCache(cacheKey, channels, 60_000);
+  return channels;
+}
+
+export async function getGuildRoles(guildId: string): Promise<any[]> {
+  const cacheKey = `roles:${guildId}`;
+  const cached = getCache<any[]>(cacheKey);
+  if (cached) return cached;
+  const roles = await discordFetch<any[]>(`/guilds/${guildId}/roles`, {
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+  });
+  setCache(cacheKey, roles, 60_000);
+  return roles;
+}
+
+export async function getGuildMember(
+  guildId: string,
+  userId: string
+): Promise<any> {
+  return discordFetch<any>(`/guilds/${guildId}/members/${userId}`, {
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+  });
+}
+
+export async function getGuild(guildId: string): Promise<{ id: string; name: string; owner_id: string }> {
+  return discordFetch(`/guilds/${guildId}`, {
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+  });
+}
+
+let cachedBotUserId: string | null = null;
+
+export async function getBotUserId(): Promise<string> {
+  if (cachedBotUserId) return cachedBotUserId;
+  const me = await discordFetch<{ id: string }>('/users/@me', {
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+  });
+  cachedBotUserId = me.id;
+  return cachedBotUserId;
+}
+
+export async function sendDM(userId: string, content: { embeds?: any[], content?: string }): Promise<void> {
+  const dm = await discordFetch<{ id: string }>(`/users/${userId}/channels`, {
+    method: 'POST',
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    body: JSON.stringify({ recipient_id: userId }),
+  });
+  await discordFetch(`/channels/${dm.id}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    body: JSON.stringify(content),
+  });
+}
+
+interface OutgoingFile {
+  name: string;
+  content: string;
+  contentType?: string;
+}
+
+async function postMessageWithFile(channelId: string, payload: any, file: OutgoingFile): Promise<any> {
+  const form = new FormData();
+  form.set('payload_json', JSON.stringify(payload));
+  const blob = new Blob([file.content], { type: file.contentType ?? 'text/html' });
+  form.set('files[0]', blob, file.name);
+  const res = await fetch(`${API_BASE}/channels/${channelId}/messages`, {
+    method: 'POST',
+    // Do NOT set Content-Type: fetch sets the multipart boundary automatically.
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    body: form as any,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Discord file message error ${res.status}: ${text.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+export async function sendDMWithFile(
+  userId: string,
+  content: { embeds?: any[]; content?: string },
+  file: OutgoingFile
+): Promise<void> {
+  const dm = await discordFetch<{ id: string }>(`/users/${userId}/channels`, {
+    method: 'POST',
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    body: JSON.stringify({ recipient_id: userId }),
+  });
+  await postMessageWithFile(dm.id, content, file);
+}
+
+export async function sendChannelMessageWithFile(
+  channelId: string,
+  content: any,
+  file: OutgoingFile
+): Promise<any> {
+  return postMessageWithFile(channelId, content, file);
+}
+
+export async function timeoutMember(guildId: string, userId: string, durationMs: number | null): Promise<void> {
+  await discordFetch(`/guilds/${guildId}/members/${userId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    body: JSON.stringify({
+      communication_disabled_until: durationMs ? new Date(Date.now() + durationMs).toISOString() : null,
+    }),
+  });
+}
+
+export async function kickMember(guildId: string, userId: string, reason: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/guilds/${guildId}/members/${userId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    body: JSON.stringify({ reason }),
+  });
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text();
+    throw new Error(`Discord kick error ${res.status}: ${text.slice(0, 200)}`);
+  }
+}
+
+export async function banMember(guildId: string, userId: string, reason: string, deleteMessageDays = 0): Promise<void> {
+  const res = await fetch(`${API_BASE}/guilds/${guildId}/bans/${userId}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bot ${config.DISCORD_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ reason, delete_message_seconds: deleteMessageDays * 86400 }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Discord ban error ${res.status}: ${text.slice(0, 200)}`);
+  }
+}
+
+export async function unbanMember(guildId: string, userId: string, reason: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/guilds/${guildId}/bans/${userId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    body: JSON.stringify({ reason }),
+  });
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text();
+    throw new Error(`Discord unban error ${res.status}: ${text.slice(0, 200)}`);
+  }
+}
+
+export async function sendChannelMessage(channelId: string, content: any): Promise<any> {
+  return discordFetch(`/channels/${channelId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    body: JSON.stringify(content),
+  });
+}
+
+export async function editMessage(channelId: string, messageId: string, content: any): Promise<any> {
+  return discordFetch(`/channels/${channelId}/messages/${messageId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    body: JSON.stringify(content),
+  });
+}
+
+export async function addMessageReaction(channelId: string, messageId: string, emoji: string): Promise<void> {
+  const encoded = encodeURIComponent(emoji);
+  const res = await fetch(`${API_BASE}/channels/${channelId}/messages/${messageId}/reactions/${encoded}/@me`, {
+    method: 'PUT',
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Discord reaction error ${res.status}: ${text.slice(0, 200)}`);
+  }
+}
+
+export async function getChannelMessages(channelId: string, limit = 100): Promise<any[]> {
+  const messages: any[] = [];
+  const batchSize = Math.min(limit, 100);
+  let lastId: string | undefined;
+
+  while (messages.length < limit) {
+    let endpoint = `/channels/${channelId}/messages?limit=${batchSize}`;
+    if (lastId) endpoint += `&before=${lastId}`;
+    const batch = await discordFetch<any[]>(endpoint, {
+      headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    });
+    messages.push(...batch);
+    if (batch.length < batchSize) break;
+    lastId = batch[batch.length - 1].id;
+  }
+
+  return messages.slice(0, limit);
+}
+
+export async function createGuildChannel(guildId: string, options: { name: string; type?: number; parent_id?: string; permission_overwrites?: any[]; topic?: string }): Promise<any> {
+  invalidateCache(`channels:${guildId}`);
+  return discordFetch(`/guilds/${guildId}/channels`, {
+    method: 'POST',
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    body: JSON.stringify(options),
+  });
+}
+
+export async function deleteChannel(channelId: string, guildId?: string): Promise<void> {
+  if (guildId) invalidateCache(`channels:${guildId}`);
+  const res = await fetch(`${API_BASE}/channels/${channelId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text();
+    throw new Error(`Discord delete channel error ${res.status}: ${text.slice(0, 200)}`);
+  }
+}
+
+export async function editChannel(channelId: string, options: any, guildId?: string): Promise<void> {
+  if (guildId) invalidateCache(`channels:${guildId}`);
+  await discordFetch(`/channels/${channelId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bot ${config.DISCORD_TOKEN}` },
+    body: JSON.stringify(options),
+  });
+}
+
+export const NUMBER_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+
+// Ré-export depuis shared pour compatibilité
+export { canManageGuild, hasDiscordPermission } from '@pinguin/shared';

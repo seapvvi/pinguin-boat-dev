@@ -1,0 +1,374 @@
+import { SlashCommandBuilder, ChatInputCommandInteraction, Client, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
+import { prisma } from '@pinguin/db';
+import { ensureUser } from '../../services/user';
+import { getEconomySettings, getOrCreateWallet } from '../../services/economy';
+import { getMinigameSettings, createGameSession, getActiveSession, updateGameSession, endGameSession, minigameChannelError } from '../../services/minigames';
+import { successEmbed, errorEmbed, createEmbed } from '../../services/embed';
+import { isModuleEnabled } from '../../guards/module';
+import { setCooldown } from '../../guards/cooldown';
+import { logger } from '@pinguin/shared';
+
+interface Horse {
+  id: string;
+  name: string;
+  emoji: string;
+  odds: number;
+  multiplier: number;
+  position: number;
+  speed: number;
+}
+
+const HORSES: Horse[] = [
+  { id: 'horse_1', name: 'Éclair', emoji: '⚡', odds: 0.35, multiplier: 1.5, position: 0, speed: 0 },
+  { id: 'horse_2', name: 'Tempête', emoji: '🌪️', odds: 0.25, multiplier: 2.0, position: 0, speed: 0 },
+  { id: 'horse_3', name: 'Comète', emoji: '☄️', odds: 0.20, multiplier: 2.5, position: 0, speed: 0 },
+  { id: 'horse_4', name: 'Tornade', emoji: '🌀', odds: 0.12, multiplier: 3.5, position: 0, speed: 0 },
+  { id: 'horse_5', name: 'Phénix', emoji: '🔥', odds: 0.06, multiplier: 5.0, position: 0, speed: 0 },
+  { id: 'horse_6', name: 'Spectre', emoji: '👻', odds: 0.02, multiplier: 10.0, position: 0, speed: 0 },
+];
+
+const RACE_LENGTH = 100;
+const RACE_ROUNDS = 10;
+
+export const data = new SlashCommandBuilder()
+  .setName('race')
+  .setDescription('Course de chevaux - Pariez sur votre cheval et gagnez !')
+  .addIntegerOption((opt) =>
+    opt.setName('mise')
+      .setDescription('Mise en coins')
+      .setRequired(true)
+      .setMinValue(1)
+  );
+
+export const module = 'minigames';
+
+export async function execute(interaction: ChatInputCommandInteraction, _client: Client): Promise<void> {
+  await interaction.deferReply();
+
+  if (!interaction.guild) return;
+
+  try {
+    if (!(await isModuleEnabled(interaction.guild.id, 'minigames'))) {
+      await interaction.editReply({ embeds: [errorEmbed('Module désactivé', 'Le module minijeux est désactivé sur ce serveur.')] });
+      return;
+    }
+
+    const settings = await getMinigameSettings(interaction.guild.id);
+    const economySettings = await getEconomySettings(interaction.guild.id);
+
+    const channelErr = minigameChannelError(settings, interaction.channelId);
+    if (channelErr) {
+      await interaction.editReply({ embeds: [errorEmbed('Mauvais salon', channelErr)] });
+      return;
+    }
+
+    const bet = interaction.options.getInteger('mise', true);
+
+    // Check bet limits
+    if (bet < settings.betMin || bet > settings.betMax) {
+      await interaction.editReply({ 
+        embeds: [errorEmbed('Mise invalide', 'La mise doit être entre ' + settings.betMin + ' et ' + settings.betMax + ' ' + economySettings.currencySymbol + '.')] 
+      });
+      return;
+    }
+
+    await ensureUser(interaction.user.id, interaction.user.username, interaction.user.displayAvatarURL());
+    const wallet = await getOrCreateWallet(interaction.guild.id, interaction.user.id, economySettings.startupBalance);
+    
+    if (wallet.wallet < bet) {
+      await interaction.editReply({ 
+        embeds: [errorEmbed('Fonds insuffisants', 'Vous n\'avez que ' + wallet.wallet + ' ' + economySettings.currencySymbol + ' dans votre portefeuille.')] 
+      });
+      return;
+    }
+
+    // Check if user has an active session
+    const activeSession = await getActiveSession(interaction.user.id, 'horse_race', interaction.guild.id);
+    if (activeSession) {
+      await interaction.editReply({ embeds: [errorEmbed('Session active', 'Vous avez déjà une course en cours.')] });
+      return;
+    }
+
+    // Create horse selection buttons (split into 2 rows of 3, max 5 per row)
+    const horseButtons1 = HORSES.slice(0, 3).map((horse) => 
+      new ButtonBuilder()
+        .setCustomId('race_select_' + horse.id)
+        .setLabel(horse.emoji + ' ' + horse.name + ' (x' + horse.multiplier + ')')
+        .setStyle(ButtonStyle.Primary)
+    );
+    const horseButtons2 = HORSES.slice(3).map((horse) => 
+      new ButtonBuilder()
+        .setCustomId('race_select_' + horse.id)
+        .setLabel(horse.emoji + ' ' + horse.name + ' (x' + horse.multiplier + ')')
+        .setStyle(ButtonStyle.Primary)
+    );
+
+    const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(horseButtons1);
+    const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(horseButtons2);
+
+    const selectionEmbed = createEmbed('minigame')
+      .setTitle('🏇 Course de Chevaux')
+      .setDescription('Choisissez votre cheval pour la course !')
+      .addFields(
+        { name: 'Mise', value: String(bet) + ' ' + economySettings.currencySymbol, inline: true },
+        { name: 'Gain potentiel', value: 'Jusqu\'à x10', inline: true }
+      )
+      .addFields(
+        { name: '⚡ Éclair', value: 'Favori - x1.5', inline: true },
+        { name: '🌪️ Tempête', value: 'x2.0', inline: true },
+        { name: '☄️ Comète', value: 'x2.5', inline: true },
+        { name: '🌀 Tornade', value: 'x3.5', inline: true },
+        { name: '🔥 Phénix', value: 'x5.0', inline: true },
+        { name: '👻 Spectre', value: 'Outsider - x10.0', inline: true }
+      )
+      .setTimestamp();
+
+    const message = await interaction.editReply({ 
+      embeds: [selectionEmbed],
+      components: [row1, row2],
+    });
+
+    // Set up collector for horse selection
+    const collector = message.createMessageComponentCollector({
+      componentType: ComponentType.Button,
+      time: 60000, // 1 minute to select
+    });
+
+    collector.on('collect', async (i) => {
+      try {
+        if (i.user.id !== interaction.user.id) {
+          await i.reply({ content: "Ce n'est pas votre course !", ephemeral: true });
+          return;
+        }
+
+        if (!i.customId.startsWith('race_select_')) {
+          return;
+        }
+
+        const horseId = i.customId.replace('race_select_', '');
+        const selectedHorse = HORSES.find((h) => h.id === horseId);
+
+        if (!selectedHorse) {
+          await i.reply({ content: 'Cheval invalide.', ephemeral: true });
+          return;
+        }
+
+        collector.stop();
+
+        // Deduct bet
+        await prisma.economyWallet.update({
+          where: { guildId_userId: { guildId: interaction.guild!.id, userId: interaction.user.id } },
+          data: { wallet: { decrement: bet } },
+        });
+
+        // Set cooldown only after bet is deducted (game actually starts)
+        await setCooldown(interaction.user.id, 'race', 5);
+
+        // Initialize race state
+        const raceHorses = HORSES.map((h) => ({ ...h, position: 0, speed: 0 }));
+        
+        const gameState: any = {
+          horses: raceHorses,
+          selectedHorseId: horseId,
+          currentRound: 0,
+          bet,
+          gameOver: false,
+        };
+
+        // Start race animation (creates session inside)
+        await runRaceAnimation(i, gameState, economySettings, interaction);
+      } catch (err) {
+        logger.error('Race selection error', { err: err instanceof Error ? err.message : String(err) });
+      }
+    });
+
+    collector.on('end', async (collected, reason) => {
+      if (reason === 'time') {
+        const timeoutEmbed = createEmbed('minigame')
+          .setTitle('⏱️ Temps écoulé')
+          .setDescription('Vous n\'avez pas sélectionné de cheval à temps.')
+          .setColor(0xf59e0b)
+          .setTimestamp();
+
+        try {
+          await message.edit({ 
+            embeds: [timeoutEmbed],
+            components: [],
+          });
+        } catch (e) {
+          // Message might have been deleted
+        }
+      }
+    });
+
+  } catch (error) {
+    logger.error('Race game error', { err: error instanceof Error ? error.message : String(error) });
+    await interaction.editReply({ embeds: [errorEmbed('Erreur', 'Une erreur est survenue lors de la course.')] });
+  }
+}
+
+async function runRaceAnimation(
+  buttonInteraction: any,
+  gameState: any,
+  economySettings: any,
+  originalInteraction: ChatInputCommandInteraction
+): Promise<void> {
+  const { horses, selectedHorseId, bet } = gameState;
+  const selectedHorse = horses.find((h: Horse) => h.id === selectedHorseId);
+
+  const message = await originalInteraction.fetchReply().catch(() => null);
+  const messageId = message?.id ?? undefined;
+
+  const session = await createGameSession(
+    originalInteraction.guild!.id,
+    originalInteraction.user.id,
+    'horse_race',
+    bet,
+    originalInteraction.channelId,
+    messageId
+  );
+
+  await updateGameSession(session.id, {
+    gameState: JSON.stringify(gameState),
+  });
+
+  // i.update() pour la réponse immédiate au clic bouton
+  const raceEmbed = createEmbed('minigame')
+    .setTitle('🏇 Course en cours...')
+    .setDescription('Les chevaux sont au départ !')
+    .addFields(
+      { name: 'Votre choix', value: selectedHorse.emoji + ' ' + selectedHorse.name + ' (x' + selectedHorse.multiplier + ')', inline: true },
+      { name: 'Mise', value: String(bet) + ' ' + economySettings.currencySymbol, inline: true }
+    )
+    .setTimestamp();
+
+  await buttonInteraction.update({ 
+    embeds: [raceEmbed],
+    components: [],
+  });
+
+  // Mises à jour des rounds via originalInteraction.editReply()
+  for (let round = 0; round < RACE_ROUNDS; round++) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    gameState.currentRound = round + 1;
+
+    for (const horse of gameState.horses) {
+      horse.speed = Math.floor(Math.random() * 18 + 3);
+      horse.position = Math.min(RACE_LENGTH, horse.position + horse.speed);
+    }
+
+    const finished = gameState.horses.filter((h: Horse) => h.position >= RACE_LENGTH);
+    if (finished.length > 0) {
+      finished.sort((a: Horse, b: Horse) => b.position - a.position);
+      gameState.horses.sort((a: Horse, b: Horse) => b.position - a.position);
+      gameState.gameOver = true;
+      break;
+    }
+
+    await updateGameSession(session.id, {
+      gameState: JSON.stringify(gameState),
+    });
+
+    const progressFields = gameState.horses.map((h: Horse) => {
+      const filled = Math.floor(h.position / 5);
+      const bar = '█'.repeat(Math.min(filled, 20)) + '░'.repeat(Math.max(0, 20 - filled));
+      const crown = h.id === selectedHorseId ? ' 👑' : '';
+      return {
+        name: h.emoji + ' ' + h.name + crown,
+        value: '`' + bar + '` **' + h.position + '**/' + RACE_LENGTH,
+        inline: false,
+      };
+    });
+
+    const roundEmbed = createEmbed('minigame')
+      .setTitle('🏇 Tour ' + (round + 1) + '/' + RACE_ROUNDS)
+      .setDescription('La course continue !')
+      .addFields(...progressFields)
+      .addFields(
+        { name: 'Votre choix', value: selectedHorse.emoji + ' ' + selectedHorse.name + ' (x' + selectedHorse.multiplier + ')', inline: true },
+        { name: 'Position', value: String(gameState.horses.find((h: Horse) => h.id === selectedHorseId)?.position || 0) + '/' + RACE_LENGTH, inline: true }
+      )
+      .setTimestamp();
+
+    try {
+      await originalInteraction.editReply({ embeds: [roundEmbed] });
+    } catch (e) {
+      return;
+    }
+  }
+
+  // Determine winner if game not over
+  if (!gameState.gameOver) {
+    gameState.gameOver = true;
+    gameState.horses.sort((a: Horse, b: Horse) => b.position - a.position);
+  }
+
+  const winner = gameState.horses[0];
+  const isWinner = winner.id === selectedHorseId;
+
+  let winnings = 0;
+  let result = '';
+  let resultColor = 0xef4444;
+
+  if (isWinner) {
+    winnings = Math.floor(bet * selectedHorse.multiplier);
+    result = '🎉 Votre cheval a gagné !';
+    resultColor = 0x22c55e;
+  } else {
+    result = '😢 Votre cheval a perdu...';
+  }
+
+  // Update wallet
+  await prisma.economyWallet.update({
+    where: { guildId_userId: { guildId: originalInteraction.guild!.id, userId: originalInteraction.user.id } },
+    data: { 
+      wallet: { increment: winnings },
+      totalEarned: { increment: isWinner ? winnings - bet : 0 }
+    },
+  });
+
+  // Create transaction
+  await prisma.economyTransaction.create({
+    data: {
+      guildId: originalInteraction.guild!.id,
+      toUserId: originalInteraction.user.id,
+      amount: winnings,
+      type: 'GAMBLE',
+      description: 'Course de chevaux - ' + (isWinner ? 'Gagné avec ' + winner.name : 'Perdu, gagnant: ' + winner.name),
+    },
+  });
+
+  await endGameSession(session.id, isWinner ? 'won' : 'lost', winnings - bet);
+
+  // Final results embed
+  const sorted = [...gameState.horses].sort((a: Horse, b: Horse) => b.position - a.position);
+  const finalFields = sorted.slice(0, 3).map((h: Horse, index: number) => {
+    const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+    return {
+      name: medal + ' ' + h.emoji + ' ' + h.name,
+      value: '`' + '█'.repeat(Math.min(Math.floor(h.position / 5), 20)) + '` **' + h.position + '**/' + RACE_LENGTH,
+      inline: true,
+    };
+  });
+
+  const rest = sorted.slice(3).map((h: Horse) => h.emoji + ' ' + h.name + ' (' + h.position + ')').join(' • ');
+
+  const finalEmbed = createEmbed('minigame')
+    .setTitle('🏁 Résultats de la course')
+    .setDescription(result)
+    .addFields(...finalFields)
+    .addFields(
+      { name: 'Classement complet', value: rest || 'Terminé', inline: false },
+      { name: 'Vainqueur', value: winner.emoji + ' ' + winner.name, inline: true },
+      { name: 'Gain', value: isWinner ? '+' + String(winnings) + ' ' + economySettings.currencySymbol : '-' + String(bet) + ' ' + economySettings.currencySymbol, inline: true }
+    )
+    .setColor(resultColor)
+    .setTimestamp();
+
+  try {
+    await originalInteraction.editReply({ embeds: [finalEmbed] });
+  } catch (e) {
+    // Message might have been deleted
+  }
+}

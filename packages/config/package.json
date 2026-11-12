@@ -1,0 +1,18 @@
+{
+  "name": "@pinguin/config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

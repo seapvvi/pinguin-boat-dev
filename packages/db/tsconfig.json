@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    // This package runs on Node (process, URL, console); the root config only
+    // ships the ES2022 lib.
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

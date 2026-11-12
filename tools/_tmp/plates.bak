@@ -1,0 +1,616 @@
+"""Builds every dotted plate used on the page. Run: python tools/plates.py
+
+Plates are halftone dot fields on a near black ground, rendered to SVG with
+poster furniture on top: corner marks, a thin frame, a mono header, a kanji
+watermark, a vertical side line, a slogan and a barcode strip.
+"""
+import math
+import os
+
+import numpy as np
+from PIL import Image
+
+import halftone as H
+
+TAU = math.tau
+M = H
+OUT = os.path.join(os.path.dirname(__file__), "..", "assets")
+
+LIGHT = (-0.6, -0.8)
+
+# ------------------------------------------------------------------- look
+# brighter ink, deeper ground, punchier dot curve than the first pass: more
+# full dots, more true black, so the plates carry like the poster reference
+INK = (233, 226, 214)
+BG = (3, 3, 3)
+STEP = 6.2
+R_MIN, R_MAX, GAMMA = 0.35, 3.35, 0.72
+
+GLYPHS = os.path.join(os.path.dirname(__file__), "..", "fonts", "noto-serif-sc-700.woff2")
+
+
+def shaded(field, dx=2.2, dy=2.6, k=0.5, light=LIGHT):
+    """Evaluate field on the dot grid plus a gradient tap for hill shading."""
+    def f(x, y):
+        return M.shade(field, x, y, dx, dy, light, k)
+    return f
+
+
+def lift(v, lo=0.02):
+    """Trim the near black floor so empty ground reads as pure black."""
+    v = np.clip(np.asarray(v, float), 0, 1)
+    return np.clip((v - lo) / (1 - lo), 0, 1)
+
+
+def vnoise(w, h, cells=5, octaves=3, seed=0):
+    """Smooth value noise as a sampler: soft blobs at `cells` scale, plus detail."""
+    rng = np.random.default_rng(seed)
+    acc = np.zeros((h, w))
+    amp, tot = 1.0, 0.0
+    for o in range(octaves):
+        c = cells * (2 ** o)
+        g = (rng.random((c + 1, c + 1)) * 255).astype(np.uint8)
+        im = Image.fromarray(g, "L").resize((w, h), Image.BICUBIC)
+        acc += np.asarray(im, float) / 255 * amp
+        tot += amp
+        amp *= 0.52
+    arr = acc / tot
+
+    def s(x, y):
+        ix = np.clip(np.round(x).astype(int), 0, w - 1)
+        iy = np.clip(np.round(y).astype(int), 0, h - 1)
+        return arr[iy, ix]
+    return s
+
+
+def specks(x, y, n, x0, x1, y0, y1, r0, r1, seed, a0, a1):
+    """A scatter of soft round specks."""
+    rng = np.random.default_rng(seed)
+    out = np.zeros(np.shape(x))
+    for _ in range(n):
+        sx, sy = rng.uniform(x0, x1), rng.uniform(y0, y1)
+        rad = rng.uniform(min(r0, r1), max(r0, r1))
+        out = np.maximum(out, M.sstep(rad, 0.0, np.hypot(x - sx, y - sy)) * rng.uniform(a0, a1))
+    return out
+
+
+def caps(x, y, ax, ay, bx, by, w0, w1=None):
+    """A tapering capsule stroke from (ax,ay) to (bx,by), width w0 -> w1."""
+    sd = M.sd_capsule(x, y, ax, ay, bx, by, 0)
+    if w1 is None:
+        return M.sstep(w0, w0 * 0.55, sd)
+    t = np.clip(np.hypot(x - ax, y - ay) / max(math.hypot(bx - ax, by - ay), 1e-9), 0, 1)
+    w = w0 + (w1 - w0) * t
+    return M.sstep(w, w * 0.55, sd)
+
+
+def ell(x, y, cx, cy, rx, ry):
+    """Normalised ellipse radius: 1 on the rim, 0 at the centre."""
+    return np.hypot((x - cx) / rx, (y - cy) / ry)
+
+
+# --------------------------------------------------------------------- tree
+# a lone tree: dappled canopy with hill shading, three branches, a ground line
+
+def tree_field(x, y):
+    n = vnoise(520, 640, cells=5, octaves=4, seed=7)
+    n2 = vnoise(520, 640, cells=12, octaves=2, seed=8)
+    cx, cy, rx, ry = 262, 240, 168, 124
+
+    def blob(a, b):
+        w = 1 + 0.20 * (n(a, b) - 0.5)
+        return M.sstep(1.06, 0.70, np.hypot((a - cx) / rx, (b - cy) / ry) / w)
+
+    canopy = M.shade(blob, x, y, 2.4, 2.8, LIGHT, 1.5)
+    dapple = np.clip(n(x, y) * 1.45 - 0.28, 0, 1) ** 0.75
+    canopy = canopy * (0.08 + 0.92 * dapple)
+    canopy = canopy * (0.52 + 0.48 * M.sstep(1.02, 0.25, ell(x, y, cx, cy, rx, ry)))
+    canopy = np.clip(canopy + 0.12 * M.sstep(0.45, 0.1, ell(x, y, cx, cy, rx, ry)), 0, 1)
+
+    # trunk and branches, a touch brighter on the lit (left) side
+    trunk = np.maximum.reduce([
+        caps(x, y, 262, 592, 258, 468, 15, 12),
+        caps(x, y, 258, 468, 250, 402, 12, 10),
+        caps(x, y, 250, 402, 194, 326, 7, 4),
+        caps(x, y, 250, 402, 262, 356, 6.5, 4),
+        caps(x, y, 250, 402, 318, 318, 7, 4),
+        caps(x, y, 194, 326, 172, 292, 3.4),
+        caps(x, y, 318, 318, 350, 286, 3.4),
+    ])
+    bark = 0.62 + 0.30 * n(x, y * 5.0)
+    trunk = trunk * bark * np.clip(0.42 + 0.40 * np.clip((270 - x) / 28.0, 0, 1), 0, 1)
+
+    # broken ground line and a soft pool of shadow under the trunk
+    band = M.sstep(584, 590, y) * M.sstep(608, 600, y)
+    dash = np.where(n(x * 2.2, 0.5) > 0.42, 0.55, 0.06)
+    ground = band * dash
+    shadow = M.sstep(1.25, 0.55, ell(x, y, 262, 598, 66, 9)) * 0.10
+    leaves = specks(x, y, 40, 130, 400, 110, 480, 1.8, 0.6, 5, 0.08, 0.32)
+    return np.maximum.reduce([canopy * 0.95, trunk, ground, shadow, leaves])
+
+
+# --------------------------------------------------------------------- city
+# a skyline at night: dark towers, sparse lit windows, a small moon
+
+def city_field(x, y):
+    base = 548
+    buildings = [
+        (52, 96, 208), (150, 80, 302), (234, 62, 246), (298, 98, 366),
+        (394, 72, 238), (466, 100, 306), (126, 38, 148), (352, 42, 168),
+    ]
+    sky = M.sstep(548, 320, y) * M.sstep(140, 320, y) * 0.04
+
+    moon = M.aa(lambda a, b: np.hypot(a - 424, b - 122) - 26, x, y)
+    mn = np.hypot((x - 424) / 26.0, (y - 122) / 26.0)
+    nz = np.sqrt(np.clip(1 - mn * mn, 0, 1))
+    lam = np.clip(-((x - 424) * 0.7 + (y - 122) * 0.7) / 26.0 * 0.4 + nz * 0.75, 0, 1)
+    moon = moon * np.clip(0.08 + 0.95 * lam ** 1.2, 0, 1)
+
+    towers = np.zeros(np.shape(x))
+    windows = np.zeros(np.shape(x))
+    for i, (cx, bw, bh) in enumerate(buildings):
+        sd = M.sd_box(x, y, cx, base - bh / 2, bw / 2, bh / 2)
+        inside = M.fill(sd)
+        towers = np.maximum(towers, inside * (0.075 + 0.02 * ((i * 7) % 3)))
+        rim = M.sstep(2.8, 0.5, np.abs(sd)) * inside
+        towers = np.maximum(towers, rim * 0.62)
+        # windows: sparse cells, brighter near street level
+        u = (x - (cx - bw / 2)) / 15.0
+        v = (y - (base - bh)) / 21.0
+        iu = np.floor(u).astype(int)
+        iv = np.floor(v).astype(int)
+        hsh = (np.sin(iu * 12.9898 + iv * 78.233 + i * 37.7) * 43758.5453) % 1.0
+        cell = (u > 0.45) & (u < bw / 15.0 - 0.45) & (v > 0.5) & (v < bh / 21.0 - 0.4)
+        fade = 0.30 + 0.70 * M.sstep(base - bh, base, y) ** 1.2
+        windows = np.maximum(windows, np.where(cell & (hsh > 0.85), inside * 0.75 * fade, 0))
+    antenna = caps(x, y, 298, base - 366, 298, base - 410, 2.4) * 0.6
+
+    street = M.sstep(base + 2, base + 9, y) * M.sstep(620, 592, y) * 0.10
+    refl = windows * M.sstep(base + 30, base + 2, y) * 0.07
+    stars = specks(x, y, 26, 10, 510, 40, 230, 1.5, 0.5, 9, 0.12, 0.4)
+    return np.maximum.reduce([towers, windows, sky, moon * 0.95, antenna, street, refl, stars])
+
+
+# --------------------------------------------------------------------- moon
+# a crescent, lit hard on its outer limb, one thin cloud band, few stars
+
+def moon_field(x, y):
+    cx, cy, r = 282, 292, 176
+    qx, qy, qr = cx + 108, cy - 78, r * 1.0
+    d_out = np.hypot(x - cx, y - cy) - r
+    d_cut = np.hypot(x - qx, y - qy) - qr
+    # crescent: inside the big circle, outside the cutter
+    cres = np.maximum(d_out, -d_cut)
+
+    def depth(a, b):
+        return np.maximum(np.hypot(a - cx, b - cy) - r, -(np.hypot(a - qx, b - qy) - qr))
+
+    body = M.aa(depth, x, y)
+    # brightness runs from the terminator (inner edge) out to the lit limb:
+    # f = 0 on the cut edge, 1 on the outer rim
+    f = np.clip(d_cut / (d_cut - d_out), 0, 1)
+    lit = f ** 1.15
+    n = vnoise(520, 640, cells=6, octaves=4, seed=23)
+    body = body * np.clip(0.03 + 1.0 * lit, 0, 1) * (0.60 + 0.50 * n(x, y))
+    limb = M.sstep(2.6, 0.4, np.abs(cres)) * 0.5
+    body = np.maximum(body, M.aa(depth, x, y) * limb)
+    cloud = caps(x, y, 120, 520, 400, 508, 16, 10) * 0.05 + caps(x, y, 220, 560, 460, 548, 12, 8) * 0.045
+    stars = specks(x, y, 40, 20, 500, 30, 560, 1.6, 0.5, 31, 0.16, 0.5)
+    stars = np.maximum(stars, specks(x, y, 12, 20, 500, 30, 200, 1.6, 0.6, 32, 0.10, 0.35))
+    return np.maximum.reduce([body, cloud, stars])
+
+
+# ------------------------------------------------------------------- saturn
+# the orbit scene: a ball, a tilted ring crossing in front, a rider moon
+
+SPH = (300, 300)
+SPH_R = 152
+ORB = (300 + 148 * math.cos(-0.75), 300 + 148 * math.sin(-0.75) * 0.62)
+ORB_R = 58
+TILT = (math.cos(0.28), math.sin(0.28))
+
+
+def saturn_field(x, y):
+    # always drawn on a 520 square, then the plate crops it to its own size
+    cx, cy = SPH
+    nx, ny = (x - cx) / SPH_R, (y - cy) / SPH_R
+    d2 = nx * nx + ny * ny
+    inside = d2 <= 1
+    nz = np.sqrt(np.clip(1 - d2, 0, 1))
+    lam = np.clip(nx * -0.55 + ny * -0.58 + nz * 0.45, 0, 1)
+    lit = 0.02 + 0.98 * lam ** 2.1
+    rim = (1 - nz) ** 3 * np.clip(-(nx * -0.55 + ny * -0.58), 0, 1)
+    body = M.aa(lambda a, b: np.hypot((a - SPH[0]) / SPH_R, (b - SPH[1]) / SPH_R) - 1, x, y) \
+        * np.clip(lit + 0.45 * rim, 0, 1)
+
+    ux, uy = TILT
+    ax, ay = -uy * 0.30, ux * 0.30
+    t = np.linspace(0, TAU, 540, endpoint=False)
+    px = cx + 276 * (np.cos(t) * ux + np.sin(t) * ax)
+    py = cy + 276 * (np.cos(t) * uy + np.sin(t) * ay)
+    far = (np.cos(t) > 0.15) & (np.sin(t) > -0.6) | (np.cos(t) > 0.75)
+    dd = np.hypot(x[..., None] - px, y[..., None] - py)
+    d_near = np.min(np.where(far, 1e9, dd), axis=-1)
+    d_far = np.min(np.where(far, dd, 1e9), axis=-1)
+    d_all = np.minimum(d_near, d_far)
+    width = 7.0 + 5.5 * np.cos(t)
+    w_near = np.max(np.where(far, 0.0, width))
+    w_far = np.max(np.where(far, width, 0.0))
+    front = M.sstep(w_near / 2 + 1.6, w_near / 2 - 1.0, d_near)
+    back = M.sstep(w_far / 2 + 1.6, w_far / 2 - 1.0, d_far)
+    back = np.where(inside & (d_all < w_far), 0, back) * 0.9
+    ring = np.maximum(front * 0.95, back)
+    ring = np.where(front > 0, ring, np.where(inside, ring, 0))
+
+    ox, oy = ORB
+    onx, ony = (x - ox) / ORB_R, (y - oy) / ORB_R
+    onz = np.sqrt(np.clip(1 - onx * onx - ony * ony, 0, 1))
+    olam = np.clip(onx * -0.55 + ony * -0.58 + onz * 0.6, 0, 1)
+    orb = M.aa(lambda a, b: np.hypot((a - ox) / ORB_R, (b - oy) / ORB_R) - 1, x, y)
+    orb = orb * np.clip(0.30 + 0.75 * olam ** 1.3 + 0.5 * (1 - onz) ** 3, 0, 1)
+
+    stars = specks(x, y, 80, 50, 480, 110, 520, 1.7, 0.6, 11, 0.28, 0.55)
+    keep = np.hypot(x - cx, y - cy) < 205
+    stars = np.where(keep, 0, stars)
+    return np.maximum.reduce([body * 0.98 * (1 - front), orb * 0.95, ring, stars])
+
+
+# ------------------------------------------------------------------- sphere
+# a clean studio ball: one hard light, a dark core, a rim of bounce light
+
+def sphere_field(x, y):
+    cx, cy, r = 260, 270, 150
+    mask = M.aa(lambda a, b: np.hypot((a - cx) / r, (b - cy) / r) - 1, x, y)
+    nx, ny = (x - cx) / r, (y - cy) / r
+    nz = np.sqrt(np.clip(1 - nx * nx - ny * ny, 0, 1))
+    lam = np.clip(nx * -0.48 + ny * -0.62 + nz * 0.60, 0, 1)
+    v = mask * np.clip(0.02 + 1.02 * lam ** 1.35, 0, 1)
+    rim = mask * (1 - nz) ** 3.2 * np.clip(nx * 0.48 + ny * 0.62, 0, 1) * 0.5
+    v = v + rim
+    hot = mask * 0.45 * np.exp(-(((x - (cx - 52)) ** 2 + (y - (cy - 78)) ** 2) / (2 * 36 ** 2)))
+    v = np.clip(v + hot, 0, 1)
+    floor = M.sstep(1.2, 0.6, ell(x, y, cx, cy + 200, 118, 14)) * 0.09
+    star = specks(x, y, 16, 20, 500, 30, 490, 1.5, 0.5, 41, 0.12, 0.4)
+    star = np.where(np.hypot(x - cx, y - cy) < r + 40, 0, star)
+    return np.maximum.reduce([v, floor, star])
+
+
+
+
+# --------------------------------------------------------------------- wave
+# a big swell crossing the frame: bright crest line, dark body, spray
+
+def wave_field(w, h):
+    """Drawn straight into the plate's own frame, so a taller plate gets more sea."""
+    return wave_at(292 + (h - 400) / 2)
+
+
+def wave_at(top):
+    def wave_field(x, y):
+        return _wave(x, y, top)
+    return wave_field
+
+
+def _wave(x, y, top):
+    n = vnoise(1040, 400, cells=6, octaves=4, seed=3)
+    y_c = top - 196 * np.exp(-(((x - 320) / 200.0) ** 2)) - 104 * np.exp(-(((x - 800) / 245.0) ** 2))
+    y_c0 = top - 196
+
+    body = M.sstep(y_c - 3, y_c + 3, y)
+    depth = np.clip((y - y_c) / 110.0, 0, 1)
+    body = body * np.clip(0.55 - 0.52 * depth, 0, 1) * np.clip(0.30 + 0.85 * n(x, y * 1.6), 0, 1)
+
+    rim = M.sstep(6, 0.6, np.abs(y - y_c)) * 0.95
+    # foam cap breaking over the main crest
+    cap = M.sstep(78, 26, np.hypot(x - 330, (y - (y_c0 + 22)) * 1.55)) * 0.62
+    cap = cap * np.clip(n(x, y) * 2.1 - 0.5, 0, 1)
+    spray = specks(x, y, 200, 240, 1020, 20, 200, 1.6, 0.5, 13, 0.15, 0.5)
+    spray = spray * M.sstep(y_c + 10, y_c - 55, y) * M.sstep(180, 320, x)
+
+    y2 = top + 92 - 34 * np.exp(-(((x - 860) / 300.0) ** 2)) - 8
+    front = M.sstep(y2 - 2, y2 + 2, y) * np.clip(0.22 - 0.20 * np.clip((y - y2) / 20.0, 0, 1), 0, 1)
+    front = np.maximum(front, M.sstep(3.4, 0.6, np.abs(y - y2)) * 0.45)
+    return np.maximum.reduce([body, rim, cap, spray, front])
+
+
+# ----------------------------------------------------------------- mountain
+# three ridges under a low sun, the far one washed with light
+
+def mountain_field(x, y):
+    n1 = vnoise(1040, 400, cells=4, octaves=3, seed=51)
+    n2 = vnoise(1040, 400, cells=5, octaves=3, seed=52)
+    n3 = vnoise(1040, 400, cells=6, octaves=3, seed=53)
+    y1 = 212 + 58 * (n1(x, 40.0) - 0.5) * 2
+    y2 = 284 + 64 * (n2(x, 90.0) - 0.5) * 2
+    y3 = 352 + 50 * (n3(x, 150.0) - 0.5) * 2
+
+    sun_d = np.hypot(x - 872, y - 128)
+    sun = M.sstep(34, 30, sun_d) * 0.9
+    glow = np.exp(-(sun_d / 110.0) ** 2) * 0.32
+
+    l1 = M.sstep(y1, y1 + 2.5, y) * np.clip(0.62 - 0.58 * np.clip((y - y1) / 165.0, 0, 1), 0, 1)
+    l1 = l1 * (0.60 + 0.40 * n1(x, y))
+    l1 = np.maximum(l1, M.sstep(5, 1, np.abs(y - y1)) * 0.65)
+    l2 = M.sstep(y2, y2 + 2.5, y) * np.clip(0.38 - 0.36 * np.clip((y - y2) / 125.0, 0, 1), 0, 1)
+    l2 = l2 * (0.60 + 0.40 * n2(x, y))
+    l2 = np.maximum(l2, M.sstep(4, 0.8, np.abs(y - y2)) * 0.38)
+    l3 = M.sstep(y3, y3 + 2.5, y) * np.clip(0.20 - 0.18 * np.clip((y - y3) / 88.0, 0, 1), 0, 1)
+    l3 = l3 * (0.62 + 0.38 * n3(x, y))
+    l3 = np.maximum(l3, M.sstep(3.4, 0.8, np.abs(y - y3)) * 0.26)
+
+    sky_mask = M.sstep(y1 + 2, y1 - 2, y)
+    sky = (sun + glow) * sky_mask
+    stars = specks(x, y, 30, 20, 1020, 20, 160, 1.6, 0.5, 55, 0.12, 0.35)
+    stars = np.where(np.hypot(x - 872, y - 128) < 120, 0, stars)
+    return np.maximum.reduce([l3, l2, l1, sky, stars])
+
+
+# ------------------------------------------------------------------- katana
+# a curved blade rising to the top right: wrapped handle, tsuba, hard edge
+
+def katana_field(x, y):
+    p0 = np.array([204.0, 446.0])
+    p1 = np.array([330.0, 300.0])
+    p2 = np.array([464.0, 134.0])
+    t = np.linspace(0, 1, 260)
+    curve = ((1 - t) ** 2)[:, None] * p0 + (2 * (1 - t) * t)[:, None] * p1 + (t ** 2)[:, None] * p2
+    tang = np.gradient(curve, axis=0)
+    tang = tang / (np.linalg.norm(tang, axis=1, keepdims=True) + 1e-9)
+
+    dx = x[..., None] - curve[None, :, 0]
+    dy = y[..., None] - curve[None, :, 1]
+    dist = np.hypot(dx, dy)
+    k = np.argmin(dist, axis=-1)
+    sd = np.take_along_axis(dist, k[..., None], axis=-1)[..., 0]
+    tx = tang[:, 0][k]
+    ty = tang[:, 1][k]
+    ddx = np.take_along_axis(dx, k[..., None], axis=-1)[..., 0]
+    ddy = np.take_along_axis(dy, k[..., None], axis=-1)[..., 0]
+    side = ddx * (-ty) + ddy * tx
+
+    tt = t[k]                       # 0 at the tsuba, 1 at the tip
+    w = 22.0 - 13.0 * tt
+    blade = M.sstep(w, w * 0.55, sd) * np.clip(0.92 - 0.28 * tt, 0, 1)
+    blade = blade * (0.72 + 0.30 * M.sstep(w, -w, sd))   # lit on the edge side
+    edge = M.sstep(2.2, 0.3, np.abs(sd - (w * 0.60))) * np.where(side > 0, 1, 0) * 1.0
+    hamon = M.sstep(7, 0, np.abs(sd + 2.5 + 2.0 * np.sin(tt * 20))) * M.sstep(w * 0.75, w * 0.35, np.abs(sd)) * 0.18
+    back_edge = M.sstep(1.5, 0.2, np.abs(sd + (w * 0.60))) * np.where(side < 0, 1, 0) * 0.25
+    tip = M.sstep(3.5, 0.5, np.abs(sd)) * M.sstep(0.99, 0.93, tt) * np.where(side > 0, 1, 0) * 0.9
+
+    tsuba_sd = M.sd_ellipse(x, y, 200, 450, 33, 12, -0.86)
+    tsuba = M.sstep(4.5, 0.6, np.abs(tsuba_sd)) * 1.0
+    handle = caps(x, y, 106, 570, 194, 456, 21, 20)
+    wrap_t = np.hypot(x - 106, y - 570) / 128.0
+    wrap = (np.sin((wrap_t * 22 - np.arctan2(y - 570, x - 106) * 2)) > 0).astype(float)
+    handle = handle * np.where(wrap > 0, 0.24, 0.85)
+    kashira = M.aa(lambda a, b: np.hypot(a - 104, b - 572) - 11, x, y) * 0.7
+    return np.maximum.reduce([blade, edge, hamon, back_edge, tsuba, handle, kashira, tip])
+
+
+# ------------------------------------------------------------------- temple
+# a two tier temple: flared roofs, lattice walls, lanterns, moon behind
+
+def temple_field(x, y):
+    n = vnoise(520, 640, cells=6, octaves=3, seed=71)
+
+    def roof(cx, span, yr, depth, th0, th1, flare):
+        a = np.abs(x - cx) / span
+        t = np.clip(a, 0, 1.08)
+        prof = yr + depth * t ** 1.7 - flare * M.sstep(0.80, 1.06, t) * t
+        th = th0 + (th1 - th0) * t
+        band = M.sstep(prof - 1.2, prof + 1.2, y) * M.sstep(prof + th + 1.2, prof + th - 1.2, y)
+        v = band * np.clip(0.34 + 0.40 * n(x, y * 1.5), 0, 1)
+        v = v + M.sstep(2.4, 0.4, np.abs(y - prof)) * band * 0.6
+        v = v * (1 - 0.45 * M.sstep(prof + th - 2.4, prof + th + 0.4, y) * band)
+        tip = M.sstep(5, 1, np.abs(y - prof)) * M.sstep(1.06, 0.99, a) * 0.8
+        return np.maximum(v * (a <= 1.08), tip * (a <= 1.10))
+
+    lower = roof(260, 158, 498, 76, 12, 21, 68)
+    upper = roof(260, 104, 436, 52, 10, 16, 46)
+
+    def lattice(x0, x1, y0, y1, sx, sy, a):
+        u = (x - x0) / sx
+        v = (y - y0) / sy
+        iu = np.floor(u).astype(int)
+        iv = np.floor(v).astype(int)
+        hsh = (np.sin(iu * 12.9898 + iv * 78.233) * 43758.5453) % 1.0
+        cell = (u > 0.15) & (u < (x1 - x0) / sx - 0.15) & (v > 0.15) & (v < (y1 - y0) / sy - 0.15)
+        return np.where(cell & (hsh > 0.40), a, 0)
+
+    upper_body = M.fill(M.sd_box(x, y, 260, 466, 48, 28)) * 0.38
+    upper_lattice = lattice(218, 302, 442, 490, 14, 12, 0.78)
+
+    wall = M.fill(M.sd_box(x, y, 260, 534, 82, 26)) * 0.36
+    door = M.fill(M.sd_box(x, y, 260, 538, 16, 22)) * 0.06
+    door_frame = M.sstep(2.2, 0.3, np.abs(M.sd_box(x, y, 260, 538, 16, 22))) * 0.78
+    win_l = lattice(196, 226, 514, 542, 10, 9, 0.72)
+    win_r = lattice(294, 324, 514, 542, 10, 9, 0.72)
+    cols = (M.sstep(3.6, 2.0, np.abs(x - 190)) + M.sstep(3.6, 2.0, np.abs(x - 330))) \
+        * M.sstep(508, 512, y) * M.sstep(560, 556, y) * 0.65
+
+    plat1 = M.fill(M.sd_box(x, y, 260, 568, 122, 9)) * 0.18
+    plat2 = M.fill(M.sd_box(x, y, 260, 586, 148, 8)) * 0.13
+    band = M.sstep(598, 602, y) * M.sstep(618, 610, y)
+    ground = band * np.where(n(x * 2.0, 0.5) > 0.45, 0.30, 0.05)
+
+    finial = caps(x, y, 260, 398, 260, 434, 3.6) * 0.7
+    finial = np.maximum(finial, M.aa(lambda a, b: np.hypot(a - 260, b - 396) - 5, x, y) * 0.7)
+
+    def lantern(lx, ly):
+        ring = M.sstep(2.8, 0.4, np.abs(np.hypot(x - lx, y - ly) - 9)) * 0.8
+        core = M.sstep(3.2, 1, np.hypot(x - lx, y - ly)) * 0.35
+        hang = caps(x, y, lx, ly - 16, lx, ly - 9, 1.8) * 0.55
+        tassel = caps(x, y, lx, ly + 9, lx, ly + 18, 1.4) * 0.5
+        return np.maximum.reduce([ring, core, hang, tassel])
+
+    moon = M.aa(lambda a, b: np.hypot(a - 132, b - 148) - 44, x, y)
+    mn = np.hypot((x - 132) / 44.0, (y - 148) / 44.0)
+    nz = np.sqrt(np.clip(1 - mn * mn, 0, 1))
+    lam = np.clip(-((x - 132) * 0.5 + (y - 148) * 0.5) / 44.0 * 0.3 + nz * 0.8, 0, 1)
+    moon = moon * np.clip(0.08 + 0.62 * lam ** 1.2, 0, 1)
+    stars = specks(x, y, 26, 30, 490, 40, 300, 1.5, 0.5, 73, 0.12, 0.4)
+    return np.maximum.reduce([lower, upper, upper_body, upper_lattice, wall, door, door_frame,
+                              win_l, win_r, cols, plat1, plat2, ground, finial,
+                              lantern(118, 552), lantern(402, 552), moon * 0.85, stars])
+
+
+# ---------------------------------------------------------------------- eye
+# the faq banner: one wide eye, ringed iris, catchlight, faint brow and lashes
+
+def eye_field(x, y):
+    cx, cy = 760, 208
+    half = 400.0
+    t = (x - cx) / half
+    s = np.abs(np.sin(np.pi * np.clip(t, -1.05, 1.05) / 2))
+    inside = np.abs(t) <= 1.02
+    y_top = cy - 128 * np.clip(s, 0, None) ** 0.85
+    y_bot = cy + 96 * np.clip(s, 0, None) ** 0.85
+
+    ix, iy = cx + 16, cy + 8
+    d = np.hypot(x - ix, y - iy)
+
+    sclera = M.sstep(y_top + 2, y_top + 10, y) * M.sstep(y_bot - 2, y_bot - 10, y) * inside
+    sclera = sclera * (0.05 + 0.30 * np.exp(-(d / 190.0) ** 2))
+    lid_up = M.sstep(6.5, 0.6, np.abs(y - y_top)) * inside * 1.0
+    lid_dn = M.sstep(4.5, 0.4, np.abs(y - y_bot)) * inside * 0.65
+
+    iris_ring = M.sstep(8, 0, np.abs(d - 66)) * 0.9
+    iris_fill = M.sstep(68, 44, d) * 0.32
+    pupil = M.sstep(42, 36, d) * 1.0
+    ang = np.arctan2(y - iy, x - ix)
+    spokes = np.clip(np.cos(ang * 24.0), 0, 1) ** 2 * M.sstep(66, 44, d) * M.sstep(44, 50, d) * 0.4
+    catch = M.sstep(10, 4, np.hypot(x - (ix - 28), y - (iy - 28))) * 1.0
+
+    lash = np.zeros(np.shape(x))
+    for tt in (-0.72, -0.45, -0.18, 0.12, 0.4, 0.68):
+        lx = cx + tt * half
+        ly = cy - 128 * abs(math.sin(math.pi * tt / 2)) ** 0.85
+        ex = lx + 40 * math.copysign(1, tt) * (0.4 + abs(tt))
+        ey = ly - 34
+        lash = np.maximum(lash, caps(x, y, lx, ly, ex, ey, 3.2) * 0.5)
+
+    brow_t = (x - cx) / (half * 0.95)
+    brow_y = cy - 196 + 48 * np.clip(brow_t, -1, 1) ** 2
+    brow = M.sstep(9, 1.5, np.abs(y - brow_y)) * np.clip(np.abs(brow_t), 0, 1) * 0.28
+
+    duct = M.sstep(8, 3, np.hypot(x - (cx - half + 26), y - (cy + 6))) * 0.5
+    return np.maximum.reduce([sclera, lid_up, lid_dn, iris_ring, iris_fill, pupil, spokes, catch,
+                              lash, brow, duct])
+
+
+# ------------------------------------------------------------------ rendering
+
+PLATES = [
+    ("tree", tree_field, 520, 640, "01", "木", "one tree, one repo. every fork."),
+    ("city", city_field, 520, 640, "02", "城", "one block, one build. every night."),
+    ("moon", moon_field, 520, 640, "03", "月", "one moon, one crew. every phase."),
+    ("saturn", saturn_field, 520, 520, "04", "星", "one ring, one path. every orbit."),
+    ("wave", wave_field, 1040, 520, "05", "波", "one wave, one line. every horizon."),
+    ("mountain", mountain_field, 1040, 400, "06", "山", "one ridge, one sun. every range."),
+    ("sphere", sphere_field, 520, 520, "07", "球", "one ball, one light. every side."),
+    ("temple", temple_field, 520, 640, "09", "寺", "one roof, one stone. every prayer."),
+    ("katana", katana_field, 520, 640, "10", "刀", "one blade, one bond. together."),
+    ("eye", eye_field, 1520, 400, "00", "眼", "one eye, one question. every answer."),
+]
+
+MONO = "ui-monospace,'Cascadia Mono',Consolas,'Courier New',monospace"
+SERIF = "'Noto Serif SC','Yu Mincho','MS Mincho',serif"
+
+
+def dots(w, h, field):
+    xs = np.arange(STEP / 2, w, STEP)
+    ys = np.arange(STEP / 2, h, STEP)
+    X, Y = np.meshgrid(xs, ys)
+    v = lift(np.clip(field(X, Y), 0, 1))
+    r = R_MIN + (R_MAX - R_MIN) * v ** GAMMA
+    keep = r > 0.42
+    return X[keep], Y[keep], r[keep]
+
+
+def furniture(w, h, name, idx, kanji, slogan, banner=False):
+    ink = "rgb(233,226,214)"
+    rng = np.random.default_rng(100 + int(idx))
+    p = []
+    # corner registration marks
+    m, a = 13, 15
+    for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+        cx = m if sx > 0 else w - m
+        cy = m if sy > 0 else h - m
+        p.append(f'<path d="M{cx} {cy} h{sx * a} M{cx} {cy} v{sy * a}" stroke="{ink}" '
+                 f'stroke-opacity=".5" stroke-width="1.1" fill="none"/>')
+    # hairline frame
+    p.append(f'<rect x="9.5" y="9.5" width="{w - 19}" height="{h - 19}" fill="none" '
+             f'stroke="{ink}" stroke-opacity=".13"/>')
+    # header + index
+    p.append(f'<text x="20" y="27" font-family="{MONO}" font-size="10" letter-spacing="2.5" '
+             f'fill="{ink}" fill-opacity=".7">PINGUIN // {name.upper()}</text>')
+    p.append(f'<text x="{w - 20}" y="27" text-anchor="end" font-family="{MONO}" font-size="10" '
+             f'letter-spacing="2" fill="{ink}" fill-opacity=".42">{idx} / 10</text>')
+    # kanji watermark, top right under the index
+    ks = 46 if not banner else 40
+    p.append(f'<text x="{w - 26}" y="{30 + ks}" text-anchor="middle" font-family="{SERIF}" '
+             f'font-weight="700" font-size="{ks}" fill="{ink}" fill-opacity=".17">{kanji}</text>')
+    # vertical line of text on the left edge (portrait plates only)
+    if not banner:
+        p.append(f'<text transform="rotate(-90 16 {h // 2})" x="16" y="{h // 2}" text-anchor="middle" '
+                 f'font-family="{MONO}" font-size="8.5" letter-spacing="3.2" fill="{ink}" '
+                 f'fill-opacity=".45">PINGUIN EMPIRE · {name.upper()}</text>')
+    # slogan + barcode, bottom right
+    p.append(f'<text x="{w - 20}" y="{h - 32}" text-anchor="end" font-family="{MONO}" font-size="9" '
+             f'letter-spacing="1.4" fill="{ink}" fill-opacity=".5">{slogan}</text>')
+    x = w - 118.0
+    bars = []
+    while x < w - 20:
+        bw = float(rng.choice([1.5, 2.5, 4.0, 6.0], p=[0.4, 0.3, 0.2, 0.1]))
+        bars.append(f'<rect x="{x:.1f}" y="{h - 24}" width="{bw:.1f}" height="12" fill="{ink}" fill-opacity=".8"/>')
+        x += bw + float(rng.uniform(2, 5))
+    p.append("".join(bars))
+    # checker patch, bottom left
+    x0, y0, c = 20, h - 62, 6.0
+    cells = "".join(
+        f'<rect x="{x0 + i * c:.0f}" y="{y0 + j * c:.0f}" width="{c:.0f}" height="{c:.0f}" fill="{ink}"/>'
+        for i in range(7) for j in range(6) if (i + j) % 2 == 0
+    )
+    p.append(f'<g fill-opacity=".1">{cells}</g>')
+    return "".join(p)
+
+
+def shifting(field, dy):
+    """Evaluate a field at (x, y - dy), i.e. window it vertically."""
+    def f(x, y):
+        return field(x, np.asarray(y, float) - dy)
+    return f
+
+
+def write_svg(path, name, field, w, h, idx, kanji, slogan, banner=False):
+    X, Y, R = dots(w, h, field)
+    ink = "rgb(233,226,214)"
+    rows = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" role="img">',
+            f'<rect width="{w}" height="{h}" fill="rgb(3,3,3)"/>',
+            f'<g fill="{ink}">']
+    row = []
+    for x, y, r in zip(X.ravel(), Y.ravel(), R.ravel()):
+        row.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.2f}"/>')
+    rows.append("".join(row))
+    rows.append('</g>')
+    rows.append(furniture(w, h, name, idx, kanji, slogan, banner))
+    rows.append('</svg>')
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("".join(rows))
+    print(f"plate-{name}.svg: {w}x{h}, {X.size} dots, {os.path.getsize(path) // 1024} KB")
+
+
+def main():
+    only = os.environ.get("PLATES")
+    for name, field, w, h, idx, kanji, slogan in PLATES:
+        if only and name not in only.split(","):
+            continue
+        banner = (h <= 420) or w > h  # a wider-than-tall plate is laid out as a strip
+        if name == "wave":
+            field = wave_field(w, h)
+        write_svg(os.path.join(OUT, f"plate-{name}.svg"), name, field, w, h, idx, kanji, slogan,
+                  banner=banner)
+
+
+if __name__ == "__main__":
+    main()

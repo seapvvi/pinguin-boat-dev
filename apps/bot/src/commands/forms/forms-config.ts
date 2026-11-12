@@ -1,0 +1,255 @@
+import { SlashCommandBuilder, ChatInputCommandInteraction, Client, ChannelType } from 'discord.js';
+import { 
+  getFormSettings, 
+  setFormChannel, 
+  createFormTemplate, 
+  getEnabledTemplates,
+  deleteFormTemplate 
+} from '../../services/forms';
+import { successEmbed, errorEmbed, createEmbed } from '../../services/embed';
+import { isModuleEnabled } from '../../guards/module';
+import { logger } from '@pinguin/shared';
+
+export const data = new SlashCommandBuilder()
+  .setName('forms')
+  .setDescription('Configurer les formulaires')
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('channel')
+      .setDescription('Définir les canaux pour les formulaires')
+      .addChannelOption((opt) =>
+        opt
+          .setName('soumissions')
+          .setDescription('Le canal où les formulaires seront envoyés')
+          .setRequired(true)
+          .addChannelTypes(ChannelType.GuildText)
+      )
+      .addChannelOption((opt) =>
+        opt
+          .setName('logs')
+          .setDescription('Le canal où les logs des formulaires seront envoyés')
+          .setRequired(false)
+          .addChannelTypes(ChannelType.GuildText)
+      )
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('create')
+      .setDescription('Créer un nouveau formulaire')
+      .addStringOption((opt) =>
+        opt
+          .setName('nom')
+          .setDescription('Le nom du formulaire')
+          .setRequired(true)
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName('champs')
+          .setDescription('Les champs du formulaire en JSON')
+          .setRequired(true)
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName('description')
+          .setDescription('La description du formulaire')
+          .setRequired(false)
+      )
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('list')
+      .setDescription('Lister tous les formulaires')
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('delete')
+      .setDescription('Supprimer un formulaire')
+      .addStringOption((opt) =>
+        opt
+          .setName('id')
+          .setDescription('L\'ID du formulaire à supprimer')
+          .setRequired(true)
+          .setAutocomplete(true)
+      )
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('toggle')
+      .setDescription('Activer ou désactiver le module formulaires')
+  );
+
+export const module = 'forms';
+
+export async function execute(interaction: ChatInputCommandInteraction, _client: Client): Promise<void> {
+  await interaction.deferReply();
+
+  if (!interaction.guild) return;
+
+  try {
+    if (!(await isModuleEnabled(interaction.guild.id, 'forms'))) {
+      await interaction.editReply({ embeds: [errorEmbed('Module désactivé', 'Le module formulaires est désactivé sur ce serveur.')] });
+      return;
+    }
+
+    const subcommand = interaction.options.getSubcommand();
+
+    switch (subcommand) {
+      case 'channel': {
+        const submissionsChannel = interaction.options.getChannel('soumissions', true);
+        const logsChannel = interaction.options.getChannel('logs');
+        
+        await setFormChannel(
+          interaction.guild.id, 
+          submissionsChannel.id, 
+          logsChannel?.id || null
+        );
+        
+        const embed = successEmbed(
+          'Canaux formulaires configurés',
+          `Les soumissions seront envoyées dans ${submissionsChannel}.` +
+          (logsChannel ? `\nLes logs seront envoyés dans ${logsChannel}.` : '')
+        );
+        
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
+
+      case 'create': {
+        const name = interaction.options.getString('nom', true);
+        const description = interaction.options.getString('description');
+        const fieldsJson = interaction.options.getString('champs', true);
+
+        let fields;
+        try {
+          fields = JSON.parse(fieldsJson);
+        } catch (e) {
+          await interaction.editReply({ 
+            embeds: [errorEmbed('JSON invalide', 'Le format des champs est invalide. Utilisez un format JSON valide.')] 
+          });
+          return;
+        }
+
+        if (!Array.isArray(fields) || fields.length === 0) {
+          await interaction.editReply({ 
+            embeds: [errorEmbed('Champs invalides', 'Les champs doivent être un tableau non vide.')] 
+          });
+          return;
+        }
+
+        // Validate field structure
+        for (const field of fields) {
+          // A field needs a label and either a `style` (short/paragraph) or a
+          // legacy `type`. Discord modals are text-only, so both map to text.
+          if (!field.label || (!field.style && !field.type)) {
+            await interaction.editReply({ 
+              embeds: [errorEmbed('Champ invalide', 'Chaque champ doit avoir un "label" et un "style" (short/paragraph).')] 
+            });
+            return;
+          }
+        }
+
+        const template = await createFormTemplate(
+          interaction.guild.id,
+          name,
+          description,
+          fields
+        );
+
+        const embed = successEmbed(
+          'Formulaire créé',
+          `Le formulaire "${name}" a été créé avec l'ID: \`${template.id}\`\n\n` +
+          `Utilisez \`/forms submit\` avec cet ID pour remplir le formulaire.`
+        );
+
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
+
+      case 'list': {
+        const settings = await getFormSettings(interaction.guild.id);
+        const templates = settings.templates || [];
+
+        if (templates.length === 0) {
+          await interaction.editReply({ 
+            embeds: [errorEmbed('Aucun formulaire', 'Aucun formulaire n\'a été créé. Utilisez `/forms create` pour en créer un.')] 
+          });
+          return;
+        }
+
+        const embed = createEmbed('form')
+          .setTitle('📋 Formulaires')
+          .setDescription(`${templates.length} formulaire(s) disponible(s)`)
+          .setTimestamp();
+
+        templates.forEach((template: any, index: number) => {
+          embed.addFields({
+            name: `${index + 1}. ${template.name}`,
+            value: `ID: \`${template.id}\`\n${template.description ? template.description : 'Pas de description'}\n${template.enabled ? '✅ Activé' : '❌ Désactivé'}`,
+            inline: false,
+          });
+        });
+
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
+
+      case 'delete': {
+        const templateId = interaction.options.getString('id', true);
+
+        await deleteFormTemplate(templateId);
+
+        const embed = successEmbed(
+          'Formulaire supprimé',
+          `Le formulaire avec l'ID \`${templateId}\` a été supprimé.`
+        );
+
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
+
+      case 'toggle': {
+        const currentSettings = await getFormSettings(interaction.guild.id);
+        const newState = !currentSettings.enabled;
+
+        await setFormChannel(
+          interaction.guild.id, 
+          currentSettings.channelId, 
+          currentSettings.logChannel
+        );
+
+        const embed = successEmbed(
+          'Module formulaires ' + (newState ? 'activé' : 'désactivé'),
+          `Le module formulaires est maintenant ${newState ? 'activé' : 'désactivé'}.`
+        );
+
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
+
+      default:
+        await interaction.editReply({ embeds: [errorEmbed('Erreur', 'Sous-commande inconnue.')] });
+    }
+  } catch (error) {
+    logger.error('Forms config error', { err: error instanceof Error ? error.message : String(error) });
+    await interaction.editReply({ embeds: [errorEmbed('Erreur', 'Une erreur est survenue lors de la configuration.')] });
+  }
+}
+
+export async function autocomplete(interaction: any, _client: Client): Promise<void> {
+  if (!interaction.guild) return;
+
+  const focusedValue = interaction.options.getFocused();
+  const subcommand = interaction.options.getSubcommand();
+
+  if (subcommand !== 'delete') return;
+
+  const templates = await getEnabledTemplates(interaction.guild.id);
+
+  const filtered = templates
+    .filter((template: any) => template.name.toLowerCase().includes(focusedValue.toLowerCase()))
+    .slice(0, 25);
+
+  await interaction.respond(
+    filtered.map((template: any) => ({ name: template.name, value: template.id }))
+  );
+}

@@ -1,0 +1,45 @@
+{
+  "name": "pinguin-boat",
+  "version": "0.1.0-alpha",
+  "private": true,
+  "description": "Pinguin BOAT - Forgé pour la communauté",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "node scripts/dev-with-preload.js",
+    "dev:turbo": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean",
+    "kill-ports": "node scripts/kill-ports.js",
+    "dev:clean": "node scripts/kill-ports.js && pnpm dev",
+    "db:generate": "pnpm --filter @pinguin/db db:generate",
+    "db:push": "pnpm --filter @pinguin/db db:push",
+    "db:migrate": "pnpm --filter @pinguin/db db:migrate",
+    "db:migrate:prod": "pnpm --filter @pinguin/db db:migrate:prod",
+    "db:studio": "pnpm --filter @pinguin/db db:studio",
+    "db:seed": "pnpm --filter @pinguin/db db:seed",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.6.1",
+    "@commitlint/config-conventional": "^19.6.0",
+    "@next/eslint-plugin-next": "^15.5.19",
+    "@typescript-eslint/eslint-plugin": "^8.60.1",
+    "@typescript-eslint/parser": "^8.60.1",
+    "eslint": "^10.4.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.4.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^6.0.3",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,42 @@
+# Local development dependencies. Not used in production (the VPS runs a
+# system PostgreSQL); this file only exists so a fresh clone can boot the stack
+# without installing a database by hand.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pinguin-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pinguin
+      POSTGRES_PASSWORD: pinguin
+      POSTGRES_DB: pinguin
+    ports:
+      - '5432:5432'
+    volumes:
+      - pinguin-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pinguin -d pinguin']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Reserved for the shared cache work (I3): the current caching layers are
+  # in-process, so nothing connects to Redis yet.
+  redis:
+    image: redis:7-alpine
+    container_name: pinguin-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6379:6379'
+    volumes:
+      - pinguin-redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pinguin-pgdata:
+  pinguin-redisdata:

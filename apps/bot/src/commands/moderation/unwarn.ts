@@ -1,0 +1,66 @@
+import { SlashCommandBuilder, ChatInputCommandInteraction, Client, PermissionFlagsBits } from 'discord.js';
+import { prisma } from '@pinguin/db';
+import { errorEmbed, successEmbed } from '../../services/embed';
+import { log } from '../../services/logger';
+import { logger } from '@pinguin/shared';
+
+export const data = new SlashCommandBuilder()
+  .setName('unwarn')
+  .setDescription('Retirer un avertissement')
+  .addStringOption((opt) => opt.setName('warn_id').setDescription('ID de l\'avertissement').setRequired(true))
+  .addStringOption((opt) => opt.setName('reason').setDescription('Raison du retrait').setRequired(true))
+  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
+
+export const permissions = true;
+export const module = 'moderation';
+
+export async function execute(interaction: ChatInputCommandInteraction, client: Client): Promise<void> {
+  await interaction.deferReply();
+
+  const warnId = interaction.options.get('warn_id')?.value as string;
+  const reason = interaction.options.get('reason')?.value as string;
+
+  if (!interaction.guild) return;
+
+  try {
+    const warning = await prisma.warning.findUnique({ where: { id: warnId } });
+
+    if (!warning || warning.guildId !== interaction.guild.id) {
+      await interaction.editReply({ embeds: [errorEmbed('Erreur', 'Avertissement introuvable.')] });
+      return;
+    }
+
+    if (!warning.active) {
+      await interaction.editReply({ embeds: [errorEmbed('Erreur', 'Cet avertissement a déjà été retiré.')] });
+      return;
+    }
+
+    await prisma.warning.update({
+      where: { id: warnId },
+      data: { active: false },
+    });
+
+    try {
+      const user = await client.users.fetch(warning.userId).catch(() => null);
+      if (user) {
+        await user.send({
+          embeds: [{
+            title: 'Avertissement retiré',
+            description: `Votre avertissement sur **${interaction.guild.name}** a été retiré.\nRaison : ${reason}`,
+            color: 0x00FF00,
+            timestamp: new Date().toISOString(),
+          }],
+        });
+      }
+    } catch {}
+
+    log({ level: 'info', message: `Unwarn: ${warnId} par ${interaction.user.username}`, guildId: interaction.guild.id });
+
+    await interaction.editReply({
+      embeds: [successEmbed('Avertissement retiré', `L'avertissement **${warnId}** a été retiré.\nRaison : ${reason}`)],
+    });
+  } catch (error) {
+    logger.error('Erreur lors du retrait de l\'avertissement', { err: error instanceof Error ? error.message : String(error) });
+    await interaction.editReply({ embeds: [errorEmbed('Erreur', 'Impossible de retirer cet avertissement.')] });
+  }
+}

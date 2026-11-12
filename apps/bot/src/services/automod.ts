@@ -1,0 +1,345 @@
+import { Message, PermissionFlagsBits } from 'discord.js';
+import { prisma } from '@pinguin/db';
+import { getAutoModConfig, invalidateGuildConfig } from './guild-config';
+
+interface AutoModSettingsData {
+  bannedWords: boolean;
+  bannedWordsList: string;
+  discordInvites: boolean;
+  externalLinks: boolean;
+  excessiveCaps: boolean;
+  capsThreshold: number;
+  excessiveEmojis: boolean;
+  emojisThreshold: number;
+  excessiveMentions: boolean;
+  mentionsThreshold: number;
+  messageSpam: boolean;
+  spamThreshold: number;
+  spamInterval: number;
+  forbiddenPings: boolean;
+  forbiddenPingRoles: string;
+  forbiddenMarkdown: boolean;
+  forbiddenMarkdownList: string;
+  whitelistRoles: string;
+  whitelistChannels: string;
+  autoSanctionThreshold: number;
+  banEnabled: boolean;
+  kickEnabled: boolean;
+  muteEnabled: boolean;
+  muteDuration: number;
+  warnEnabled: boolean;
+  logChannelId: string | null;
+}
+
+const infractions = new Map<string, number>();
+
+function parseList(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (typeof raw !== 'string') return [];
+
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => String(item).trim()).filter(Boolean);
+    }
+    if (typeof parsed === 'string') {
+      return parseList(parsed);
+    }
+  } catch {
+    // fallback below (CSV/newlines)
+  }
+
+  return trimmed
+    .split(/[,\r\n]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+async function getSettings(guildId: string): Promise<AutoModSettingsData | null> {
+  return getAutoModConfig(guildId) as Promise<AutoModSettingsData | null>;
+}
+
+function isWhitelisted(message: Message, whitelistRoles: string[], whitelistChannels: string[]): boolean {
+  if (whitelistChannels.includes(message.channel.id)) return true;
+  if (!message.member) return false;
+  if (message.member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+  if (message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return true;
+  return message.member.roles.cache.some((r) => whitelistRoles.includes(r.id));
+}
+
+function countEmojis(text: string): number {
+  const matches = text.match(/\p{Extended_Pictographic}/gu);
+  return matches?.length ?? 0;
+}
+
+function normalizeText(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function escapeRegex(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function applySanction(message: Message, settings: AutoModSettingsData, count: number): Promise<string> {
+  if (!message.member) return 'NONE';
+  const reason = `Auto-modération (${count} infractions)`;
+
+  let sanction: 'ban' | 'kick' | 'mute' | 'warn' | 'none' = 'warn';
+  if (settings.banEnabled) sanction = 'ban';
+  else if (settings.kickEnabled) sanction = 'kick';
+  else if (settings.muteEnabled) sanction = 'mute';
+  else if (settings.warnEnabled === false) sanction = 'none';
+
+  if (sanction === 'ban') {
+    await message.member.ban({ reason }).catch(() => {});
+    return 'BAN';
+  }
+  if (sanction === 'kick') {
+    await message.member.kick(reason).catch(() => {});
+    return 'KICK';
+  }
+  if (sanction === 'mute') {
+    const minutes = Math.max(Number(settings.muteDuration) || 10, 1);
+    await message.member.timeout(minutes * 60 * 1000, reason).catch(() => {});
+    return 'MUTE';
+  }
+  if (sanction === 'none') {
+    return 'NONE';
+  }
+
+  await prisma.moderationCase.create({
+    data: {
+      guildId: message.guild!.id,
+      userId: message.author.id,
+      moderatorId: message.client.user!.id,
+      type: 'WARN',
+      reason,
+    },
+  }).catch(() => {});
+  await message.author.send(`⚠️ **Avertissement** sur **${message.guild!.name}** : ${reason}`).catch(() => {});
+  return 'WARN';
+}
+
+export async function checkAutoMod(message: Message): Promise<boolean> {
+  if (!message.guild || message.author.bot || !message.member) return false;
+
+  const settings = await getSettings(message.guild.id);
+  if (!settings) return false;
+
+  const hasAnyRule =
+    (settings.bannedWords && settings.bannedWordsList) ||
+    settings.discordInvites ||
+    settings.externalLinks ||
+    settings.excessiveCaps ||
+    settings.excessiveEmojis ||
+    settings.excessiveMentions ||
+    settings.messageSpam ||
+    (settings.forbiddenPings && settings.forbiddenPingRoles) ||
+    (settings.forbiddenMarkdown && settings.forbiddenMarkdownList);
+  if (!hasAnyRule) return false;
+
+  const whitelistRoles = parseList(settings.whitelistRoles);
+  const whitelistChannels = parseList(settings.whitelistChannels);
+  if (isWhitelisted(message, whitelistRoles, whitelistChannels)) return false;
+
+  const content = message.content;
+  let violation = false;
+  let reason = '';
+
+  if (settings.bannedWords) {
+    const words = parseList(settings.bannedWordsList)
+      .map((w) => normalizeText(w).trim())
+      .filter(Boolean);
+    const lower = normalizeText(content);
+    if (words.some((w) => {
+      const pattern = new RegExp(`(^|\\b|\\s)${escapeRegex(w)}(\\b|\\s|$)`, 'i');
+      return pattern.test(lower) || lower.includes(w);
+    })) {
+      violation = true;
+      reason = 'Mot interdit';
+    }
+  }
+
+  if (!violation && settings.discordInvites && /(discord\.gg|discord\.com\/invite)/i.test(content)) {
+    violation = true;
+    reason = 'Invitation Discord';
+  }
+
+  if (!violation && settings.externalLinks && /https?:\/\//i.test(content) && !/discord/i.test(content)) {
+    violation = true;
+    reason = 'Lien externe';
+  }
+
+  if (!violation && settings.excessiveCaps && content.length > 8) {
+    const letters = content.replace(/[^a-zA-Z]/g, '');
+    if (letters.length > 0) {
+      const upper = letters.replace(/[^A-Z]/g, '').length;
+      if ((upper / letters.length) * 100 >= settings.capsThreshold) {
+        violation = true;
+        reason = 'Majuscules excessives';
+      }
+    }
+  }
+
+  if (!violation && settings.excessiveEmojis && countEmojis(content) >= settings.emojisThreshold) {
+    violation = true;
+    reason = 'Emojis excessifs';
+  }
+
+  if (!violation && settings.excessiveMentions) {
+    const mentions = message.mentions.users.size + message.mentions.roles.size;
+    if (mentions >= settings.mentionsThreshold) {
+      violation = true;
+      reason = 'Mentions excessives';
+    }
+  }
+
+  if (!violation && settings.messageSpam) {
+    const key = `${message.guild.id}:${message.author.id}`;
+    const now = Date.now();
+    const windowMs = Math.max(settings.spamInterval, 1) * 1000;
+    const spamCache = getSpamCache();
+    const times: number[] = spamCache.get(key) ?? [];
+    times.push(now);
+    const recent = times.filter((t) => now - t < windowMs);
+    if (recent.length === 0) {
+      spamCache.delete(key);
+    } else {
+      spamCache.set(key, recent);
+    }
+    if (recent.length >= settings.spamThreshold) {
+      violation = true;
+      reason = 'Spam';
+    }
+  }
+
+  if (!violation && settings.forbiddenPings) {
+    const forbiddenRoles = parseList(settings.forbiddenPingRoles);
+    if (forbiddenRoles.length > 0 && message.mentions.roles.size > 0) {
+      const hasForbiddenPing = message.mentions.roles.some((role) => forbiddenRoles.includes(role.id));
+      if (hasForbiddenPing) {
+        violation = true;
+        reason = 'Ping interdit';
+      }
+    }
+  }
+
+  if (!violation && settings.forbiddenMarkdown) {
+    const forbiddenPatterns = parseList(settings.forbiddenMarkdownList);
+    if (forbiddenPatterns.length > 0) {
+      const hasForbiddenMarkdown = forbiddenPatterns.some((pattern) => {
+        const escaped = escapeRegex(pattern);
+        const regex = new RegExp(escaped, 'i');
+        return regex.test(content);
+      });
+      if (hasForbiddenMarkdown) {
+        violation = true;
+        reason = 'Markdown interdit';
+      }
+    }
+  }
+
+  if (!violation) return false;
+
+  const ch = message.channel;
+
+  if (violation && reason === 'Spam' && ch.isTextBased() && 'bulkDelete' in ch) {
+    const windowMs = Math.max(settings.spamInterval, 1) * 1000;
+    const cutoff = Date.now() - windowMs;
+    const textChannel = ch as import('discord.js').TextChannel;
+    const toDelete = textChannel.messages?.cache
+      ? textChannel.messages.cache
+          .filter((m) => m.author.id === message.author.id && m.createdTimestamp >= cutoff)
+          .map((m) => m.id)
+      : [message.id];
+    if (toDelete.length > 1) {
+      await textChannel.bulkDelete(toDelete.slice(0, 100), true).catch(() => message.delete().catch(() => {}));
+    } else {
+      await message.delete().catch(() => {});
+    }
+  } else {
+    await message.delete().catch(() => {});
+  }
+
+  if (ch.isTextBased() && !ch.isDMBased()) {
+    (ch as import('discord.js').TextChannel).send({ content: `<@${message.author.id}> ⚠️ Ce message a été supprimé (${reason}).` })
+      .then((warnMsg) => { setTimeout(() => warnMsg.delete().catch(() => {}), 5000); })
+      .catch(() => {});
+  }
+
+  const infKey = `${message.guild.id}:${message.author.id}`;
+  const count = (infractions.get(infKey) ?? 0) + 1;
+  infractions.set(infKey, count);
+
+  await prisma.auditLog.create({
+    data: {
+      guildId: message.guild.id,
+      userId: message.author.id,
+      action: 'AUTO_MOD_VIOLATION',
+      details: JSON.stringify({ reason, type: violationType(reason), channelId: message.channel.id }),
+    },
+  }).catch(() => {});
+
+  const threshold = Math.max(settings.autoSanctionThreshold ?? 3, 1);
+  if (count >= threshold) {
+    const sanction = await applySanction(message, settings, count);
+    await prisma.auditLog.create({
+      data: {
+        guildId: message.guild.id,
+        userId: message.author.id,
+        action: 'AUTO_MOD_SANCTION',
+        details: JSON.stringify({ reason, type: violationType(reason), channelId: message.channel.id, count, sanction }),
+      },
+    }).catch(() => {});
+    infractions.set(infKey, 0);
+  }
+
+  if (settings.logChannelId) {
+    const ch = message.guild.channels.cache.get(settings.logChannelId);
+    if (ch?.isTextBased()) {
+      await ch
+        .send(
+          `⚠️ **Auto-mod** — <@${message.author.id}> : ${reason} (infraction **${count}/${threshold}**)` +
+            (count >= threshold ? ' → **sanction appliquée**' : '')
+        )
+        .catch(() => {});
+    }
+  }
+
+  return true;
+}
+
+function violationType(reason: string): string {
+  const map: Record<string, string> = {
+    'Mot interdit': 'BANNED_WORDS',
+    'Invitation Discord': 'LINKS',
+    'Lien externe': 'LINKS',
+    'Majuscules excessives': 'CAPS',
+    'Emojis excessifs': 'EMOJIS',
+    'Mentions excessives': 'MENTIONS',
+    'Spam': 'SPAM',
+    'Ping interdit': 'MENTIONS',
+    'Markdown interdit': 'BANNED_WORDS',
+  }
+  return map[reason] ?? 'SPAM'
+}
+
+function getSpamCache(): Map<string, number[]> {
+  const globalCache = (global as Record<string, unknown>);
+  if (!globalCache.__automodSpam) {
+    globalCache.__automodSpam = new Map<string, number[]>();
+  }
+  return globalCache.__automodSpam as Map<string, number[]>;
+}
+
+export function invalidateAutoModCache(guildId: string): void {
+  invalidateGuildConfig(guildId);
+}
