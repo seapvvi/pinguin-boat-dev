@@ -10,7 +10,7 @@
     "db:push": "prisma db push",
     "db:migrate": "node ../../scripts/prisma-migrate.mjs dev",
     "db:migrate:status": "node ../../scripts/prisma-migrate.mjs status",
-    "db:migrate:baseline": "prisma migrate resolve --applied --ignore-missing-migrations --schema prisma/schema.prisma",
+    "db:migrate:baseline": "node ../../scripts/prisma-migrate.mjs resolve --all",
     "db:migrate:prod": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "tsx src/seed.ts",
