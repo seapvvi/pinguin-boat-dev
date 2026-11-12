@@ -199,7 +199,7 @@ pnpm db:migrate
 ```bash
 # Redémarrage forcé
 pm2 stop pinguin-api pinguin-bot pinguin-web
-pm2 start /opt/pinguinboat/current/deploy/pm2.config.json
+pm2 start /opt/pinguinboat/current/deploy/pm2.config.js
 
 # Vérification manuelle
 node /opt/pinguinboat/current/apps/api/dist/apps/api/src/index.js

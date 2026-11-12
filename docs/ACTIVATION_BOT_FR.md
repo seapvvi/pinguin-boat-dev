@@ -174,7 +174,7 @@ psql -U pinguin -d pinguinboat -c "\dt"
 
 ```bash
 cd /opt/pinguinboat/current
-pm2 start deploy/pm2.config.json
+pm2 start deploy/pm2.config.js
 pm2 save
 pm2 startup
 ```

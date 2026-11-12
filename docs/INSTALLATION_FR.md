@@ -101,7 +101,7 @@ pnpm db:migrate:prod   # ou pnpm db:migrate en dev
 ### Étape 8 : Démarrer les services PM2
 
 ```bash
-pm2 start /opt/pinguinboat/current/deploy/pm2.config.json
+pm2 start /opt/pinguinboat/current/deploy/pm2.config.js
 pm2 save
 pm2 startup
 ```

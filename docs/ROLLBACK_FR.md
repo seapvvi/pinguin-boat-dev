@@ -215,7 +215,7 @@ pm2 restart all --update-env
 # Arrêter et redémarrer manuellement
 pm2 stop pinguin-api pinguin-bot pinguin-web
 pm2 delete pinguin-api pinguin-bot pinguin-web
-pm2 start /opt/pinguinboat/current/deploy/pm2.config.json
+pm2 start /opt/pinguinboat/current/deploy/pm2.config.js
 
 # Vérifier les logs
 pm2 logs --lines 50
