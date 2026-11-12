@@ -12,9 +12,13 @@
   ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "@pinguin/db#db:generate"],
       "outputs": [".next/**", "dist/**", "!.next/cache/**"],
-      "env": ["NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_SITE_URL"]
+      "env": [
+        "NEXT_PUBLIC_API_URL",
+        "NEXT_PUBLIC_APP_URL",
+        "NEXT_PUBLIC_SITE_URL"
+      ]
     },
     "dev": {
       "cache": false,
@@ -31,6 +35,9 @@
     },
     "db:generate": {
       "cache": false
+    },
+    "@pinguin/db#build": {
+      "outputs": []
     },
     "db:push": {
       "cache": false

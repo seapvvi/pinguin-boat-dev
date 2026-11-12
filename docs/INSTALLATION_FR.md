@@ -87,11 +87,15 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
+`pnpm build` génère lui-même le client Prisma (`@pinguin/db#db:generate`), il
+n'y a donc pas d'ordre à respecter. Si tu lances `tsc` directement dans
+`apps/api` sans build turbo, génère le client d'abord, sinon les enums Prisma
+manquent et TypeScript signale des dizaines d'erreurs `implicitly has an any`.
+
 ### Étape 7 : Appliquer les migrations Prisma
 
 ```bash
-pnpm db:generate
-pnpm db:migrate
+pnpm db:migrate:prod   # ou pnpm db:migrate en dev
 ```
 
 ### Étape 8 : Démarrer les services PM2
