@@ -1,9 +1,21 @@
+import { existsSync } from 'node:fs';
 import { z } from 'zod';
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load .env from project root (3 levels up from packages/config/src/)
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+// Load the repo-root .env. This package ships as TypeScript source, so it is
+// normally evaluated as ESM and `__dirname` does not exist there; keep it as a
+// fast path when the file is compiled (CJS) and fall back to the process cwd,
+// which is the repo root under PM2, an app directory under `pnpm dev`/vitest
+// and `packages/db` for the seed script.
+const envFile = [
+  ...(typeof __dirname === 'string' ? [path.resolve(__dirname, '../../../.env')] : []),
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), '../../.env'),
+  path.resolve(process.cwd(), '../../../.env'),
+].find((candidate) => existsSync(candidate));
+
+if (envFile) dotenv.config({ path: envFile });
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
