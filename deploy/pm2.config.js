@@ -2,9 +2,12 @@
 // not against this file, so every path here is absolute.
 // Override the install root with PINGUIN_ROOT, e.g.:
 //   PINGUIN_ROOT=$HOME/pinguin-boat-dev pm2 start deploy/pm2.config.js
-// Defaults to the /opt layout created by scripts/install.sh.
+// Defaults to the /opt layout created by scripts/install.sh. Logs default to
+// /opt/pinguinboat/shared/logs there, and to $PINGUIN_ROOT/logs otherwise.
 const root = process.env.PINGUIN_ROOT || "/opt/pinguinboat/current";
-const logs = process.env.PINGUIN_LOGS || "/opt/pinguinboat/shared/logs";
+const logs =
+  process.env.PINGUIN_LOGS ||
+  (process.env.PINGUIN_ROOT ? `${root}/logs` : "/opt/pinguinboat/shared/logs");
 
 module.exports = {
   apps: [
@@ -41,7 +44,8 @@ module.exports = {
     {
       name: "pinguin-web",
       // apps/web has no server.js; the dashboard is started with `next start`.
-      script: `${root}/node_modules/next/dist/bin/next`,
+      // pnpm does not hoist, so `next` lives in apps/web/node_modules.
+      script: `${root}/apps/web/node_modules/next/dist/bin/next`,
       args: "start",
       cwd: `${root}/apps/web`,
       instances: 1,
