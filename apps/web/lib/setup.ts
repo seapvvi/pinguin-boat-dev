@@ -1,5 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from "node:fs";
+import path from "node:path";
+
+const { rootEnvPath } = require("./root-env.js") as {
+  rootEnvPath: (webRoot?: string) => string;
+};
 
 /**
  * Utilitaires de l'assistant de premier démarrage (/setup).
@@ -8,32 +12,32 @@ import path from 'node:path';
  */
 
 const WEB_ROOT = process.cwd();
-export const ROOT_ENV_PATH = path.resolve(WEB_ROOT, '../../.env');
-export const WEB_ENV_PATH = path.join(WEB_ROOT, '.env.local');
+export const ROOT_ENV_PATH: string = rootEnvPath(WEB_ROOT);
+export const WEB_ENV_PATH = path.join(WEB_ROOT, ".env.local");
 
 const REQUIRED_KEYS = [
-  'DISCORD_CLIENT_ID',
-  'DISCORD_CLIENT_SECRET',
-  'DISCORD_TOKEN',
-  'DISCORD_OWNER_ID',
-  'DISCORD_PUBLIC_KEY',
-  'DATABASE_URL',
-  'SESSION_SECRET',
-  'BOT_INTERNAL_SECRET',
-  'OWNER_PASSWORD',
-  'API_URL',
-  'NEXT_PUBLIC_API_URL',
-  'NEXT_PUBLIC_APP_URL',
-  'NEXT_PUBLIC_DISCORD_CLIENT_ID',
-  'NEXT_PUBLIC_SITE_URL',
+  "DISCORD_CLIENT_ID",
+  "DISCORD_CLIENT_SECRET",
+  "DISCORD_TOKEN",
+  "DISCORD_OWNER_ID",
+  "DISCORD_PUBLIC_KEY",
+  "DATABASE_URL",
+  "SESSION_SECRET",
+  "BOT_INTERNAL_SECRET",
+  "OWNER_PASSWORD",
+  "API_URL",
+  "NEXT_PUBLIC_API_URL",
+  "NEXT_PUBLIC_APP_URL",
+  "NEXT_PUBLIC_DISCORD_CLIENT_ID",
+  "NEXT_PUBLIC_SITE_URL",
 ] as const;
 
 export function parseEnv(content: string): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const rawLine of content.split('\n')) {
+  for (const rawLine of content.split("\n")) {
     const line = rawLine.trim();
-    if (!line || line.startsWith('#')) continue;
-    const eq = line.indexOf('=');
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
     if (eq === -1) continue;
     const key = line.slice(0, eq).trim();
     let value = line.slice(eq + 1).trim();
@@ -51,7 +55,7 @@ export function parseEnv(content: string): Record<string, string> {
 export function readRootEnv(): Record<string, string> {
   try {
     if (!fs.existsSync(ROOT_ENV_PATH)) return {};
-    return parseEnv(fs.readFileSync(ROOT_ENV_PATH, 'utf8'));
+    return parseEnv(fs.readFileSync(ROOT_ENV_PATH, "utf8"));
   } catch {
     return {};
   }
@@ -64,13 +68,13 @@ export function isSetupRequired(): boolean {
 
 /** Mot de passe du /setup, lu depuis le .env racine (jamais commité). */
 export function getSetupPassword(): string {
-  return readRootEnv().SETUP_PASSWORD ?? '';
+  return readRootEnv().SETUP_PASSWORD ?? "";
 }
 
 /** Échappe une valeur pour un fichier .env (guillemets si #, espaces, quotes). */
 export function q(value: string): string {
   if (/[\s#"'\\]/.test(value)) {
-    return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+    return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
   }
   return value;
 }
@@ -90,7 +94,10 @@ export interface SetupValues {
   apiUrl: string;
 }
 
-export function buildRootEnv(v: SetupValues, existing: Record<string, string>): string {
+export function buildRootEnv(
+  v: SetupValues,
+  existing: Record<string, string>,
+): string {
   return `# ─────────────────────────────────────────────
 # Pinguin BOAT — Configuration générée par l'assistant /setup
 # ${new Date().toISOString()}
@@ -133,7 +140,7 @@ BOT_INTERNAL_URL=http://127.0.0.1:3003
 BOT_INTERNAL_SECRET=${q(v.botInternalSecret)}
 
 # ── Setup ──
-SETUP_PASSWORD=${q(existing.SETUP_PASSWORD ?? '')}
+SETUP_PASSWORD=${q(existing.SETUP_PASSWORD ?? "")}
 
 # ── GitHub ──
 GITHUB_REPO=seapvvi/pinguin-boat
@@ -182,6 +189,6 @@ NEXT_PUBLIC_SITE_URL=${q(v.appUrl)}
 
 export function writeEnvFiles(v: SetupValues): void {
   const existing = readRootEnv();
-  fs.writeFileSync(ROOT_ENV_PATH, buildRootEnv(v, existing), 'utf8');
-  fs.writeFileSync(WEB_ENV_PATH, buildWebEnv(v), 'utf8');
+  fs.writeFileSync(ROOT_ENV_PATH, buildRootEnv(v, existing), "utf8");
+  fs.writeFileSync(WEB_ENV_PATH, buildWebEnv(v), "utf8");
 }

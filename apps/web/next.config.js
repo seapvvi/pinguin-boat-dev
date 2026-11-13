@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const path = require("path");
+// Next only reads apps/web/.env*, but the project's single .env lives at the root.
+const { patchNextConfig } = require("./lib/root-env");
 
 const nextConfig = {
   outputFileTracingRoot: path.join(__dirname, "../.."),
@@ -90,4 +92,6 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+// Without this, `next start` sees no NEXT_PUBLIC_* / NEXT_PUBLIC_API_URL and the dashboard
+// has no API address (the setup assistant writes those keys to the root .env).
+module.exports = patchNextConfig(nextConfig);

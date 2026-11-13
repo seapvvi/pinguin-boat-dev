@@ -1,11 +1,14 @@
-import { FastifyReply, FastifyRequest } from 'fastify';
-import { createHash } from 'crypto';
-import { prisma } from '@pinguin/db';
-import { getConfig } from '@pinguin/config';
-import { get, set, del as invalidateKey, invalidateCache as invalidatePrefix } from '../utils/cache';
-import { SESSION_COOKIE_NAME } from '../utils/session-cookie';
-
-const config = getConfig();
+import { FastifyReply, FastifyRequest } from "fastify";
+import { createHash } from "crypto";
+import { prisma } from "@pinguin/db";
+import { getConfig } from "@pinguin/config";
+import {
+  get,
+  set,
+  del as invalidateKey,
+  invalidateCache as invalidatePrefix,
+} from "../utils/cache";
+import { SESSION_COOKIE_NAME } from "../utils/session-cookie";
 
 // Short TTLs: authentication is checked on every request, but a 20 s stale
 // window keeps the cost at one query per window while still reacting quickly
@@ -13,7 +16,7 @@ const config = getConfig();
 const SESSION_CACHE_SECONDS = 20;
 const BLACKLIST_CACHE_SECONDS = 15;
 
-declare module 'fastify' {
+declare module "fastify" {
   interface FastifyRequest {
     user?: {
       id: string;
@@ -27,7 +30,7 @@ declare module 'fastify' {
   }
 }
 
-type CachedUser = NonNullable<FastifyRequest['user']>;
+type CachedUser = NonNullable<FastifyRequest["user"]>;
 
 function sessionCacheKey(hashedToken: string): string {
   return `auth:session:${hashedToken}`;
@@ -44,7 +47,7 @@ export function invalidateSessionCache(hashedToken?: string): void {
     invalidateKey(sessionCacheKey(hashedToken));
     return;
   }
-  invalidatePrefix('auth:session:');
+  invalidatePrefix("auth:session:");
 }
 
 /** Drop the cached blacklist verdict for a user. */
@@ -54,7 +57,7 @@ export function invalidateBlacklistCache(discordId: string): void {
 
 export async function authenticate(
   request: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   let token: string | undefined;
 
@@ -65,7 +68,7 @@ export async function authenticate(
 
   if (!token) {
     const authHeader = request.headers.authorization;
-    if (authHeader?.startsWith('Bearer ')) {
+    if (authHeader?.startsWith("Bearer ")) {
       token = authHeader.slice(7);
     }
   }
@@ -73,12 +76,12 @@ export async function authenticate(
   if (!token) {
     reply.status(401).send({
       success: false,
-      error: 'Authentification requise',
+      error: "Authentification requise",
     });
     return;
   }
 
-  const hashedToken = createHash('sha256').update(token).digest('hex');
+  const hashedToken = createHash("sha256").update(token).digest("hex");
 
   let user = get<CachedUser>(sessionCacheKey(hashedToken));
 
@@ -91,7 +94,7 @@ export async function authenticate(
     if (!session) {
       reply.status(401).send({
         success: false,
-        error: 'Session invalide',
+        error: "Session invalide",
       });
       return;
     }
@@ -100,7 +103,7 @@ export async function authenticate(
       await prisma.session.delete({ where: { id: session.id } });
       reply.status(401).send({
         success: false,
-        error: 'Session expirée',
+        error: "Session expirée",
       });
       return;
     }
@@ -121,7 +124,7 @@ export async function authenticate(
   if (blacklisted) {
     reply.status(403).send({
       success: false,
-      error: `Votre compte a été blacklisté. Vous pouvez contester en ouvrant un ticket: ${config.DISCORD_SUPPORT_INVITE}`,
+      error: `Votre compte a été blacklisté. Vous pouvez contester en ouvrant un ticket: ${getConfig().DISCORD_SUPPORT_INVITE}`,
     });
     return;
   }

@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
-type Step = 'loading' | 'password' | 'form' | 'done' | 'locked';
+type Step = "loading" | "password" | "form" | "done" | "locked";
 
 interface FormState {
   clientId: string;
@@ -24,16 +24,16 @@ interface FormState {
 function randomHex(bytes: number): string {
   const arr = new Uint8Array(bytes);
   crypto.getRandomValues(arr);
-  return Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function Field({
   label,
   value,
   onChange,
-  type = 'text',
-  placeholder = '',
-  hint = '',
+  type = "text",
+  placeholder = "",
+  hint = "",
 }: {
   label: string;
   value: string;
@@ -60,35 +60,38 @@ function Field({
 }
 
 export default function SetupPage() {
-  const [step, setStep] = useState<Step>('loading');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [step, setStep] = useState<Step>("loading");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [dbTest, setDbTest] = useState('');
+  const [restartCommand, setRestartCommand] = useState("");
+  const [broadcast, setBroadcast] = useState("");
+  const [dbTest, setDbTest] = useState("");
   const [form, setForm] = useState<FormState>({
-    clientId: '',
-    clientSecret: '',
-    token: '',
-    ownerId: '',
-    publicKey: '',
-    devGuildId: '',
-    databaseUrl: 'postgresql://pinguin:password@localhost:5432/pinguinboat',
-    ownerPassword: '',
+    clientId: "",
+    clientSecret: "",
+    token: "",
+    ownerId: "",
+    publicKey: "",
+    devGuildId: "",
+    databaseUrl: "postgresql://pinguin:password@localhost:5432/pinguinboat",
+    ownerPassword: "",
     sessionSecret: randomHex(32),
     botInternalSecret: randomHex(32),
-    appUrl: '',
-    apiUrl: '',
+    appUrl: "",
+    apiUrl: "",
   });
 
-  const set = (key: keyof FormState) => (v: string) => setForm((f) => ({ ...f, [key]: v }));
+  const set = (key: keyof FormState) => (v: string) =>
+    setForm((f) => ({ ...f, [key]: v }));
 
   useEffect(() => {
-    fetch('/api/setup/status')
+    fetch("/api/setup/status")
       .then((r) => r.json())
       .then((d: { setupRequired?: boolean }) => {
-        setStep(d.setupRequired ? 'password' : 'locked');
+        setStep(d.setupRequired ? "password" : "locked");
       })
-      .catch(() => setStep('password'));
+      .catch(() => setStep("password"));
 
     const { protocol, hostname } = window.location;
     setForm((f) => ({
@@ -101,21 +104,21 @@ export default function SetupPage() {
   async function verifyPassword(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setError('');
+    setError("");
     try {
-      const res = await fetch('/api/setup/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/setup/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       });
       const data = (await res.json()) as { ok: boolean; error?: string };
       if (data.ok) {
-        setStep('form');
+        setStep("form");
       } else {
-        setError(data.error ?? 'that password was not accepted.');
+        setError(data.error ?? "that password was not accepted.");
       }
     } catch {
-      setError('network error. try again.');
+      setError("network error. try again.");
     } finally {
       setBusy(false);
     }
@@ -123,17 +126,19 @@ export default function SetupPage() {
 
   async function testDb() {
     setBusy(true);
-    setDbTest('');
+    setDbTest("");
     try {
-      const res = await fetch('/api/setup/test-db', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/setup/test-db", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password, databaseUrl: form.databaseUrl }),
       });
       const data = (await res.json()) as { ok: boolean; error?: string };
-      setDbTest(data.ok ? 'connection ok' : data.error ?? 'connection failed');
+      setDbTest(
+        data.ok ? "connection ok" : (data.error ?? "connection failed"),
+      );
     } catch {
-      setDbTest('network error');
+      setDbTest("network error");
     } finally {
       setBusy(false);
     }
@@ -142,21 +147,49 @@ export default function SetupPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setError('');
+    setError("");
     try {
-      const res = await fetch('/api/setup/complete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/setup/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password, ...form }),
       });
-      const data = (await res.json()) as { ok: boolean; error?: string };
+      const data = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        restartCommand?: string;
+      };
       if (data.ok) {
-        setStep('done');
+        setRestartCommand(data.restartCommand ?? "");
+        setStep("done");
       } else {
-        setError(data.error ?? 'the configuration was not written.');
+        setError(data.error ?? "the configuration was not written.");
       }
     } catch {
-      setError('network error. try again.');
+      setError("network error. try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Runs on the host: restarts the API and bot so they read the new .env.
+  async function restartServices() {
+    setBusy(true);
+    setBroadcast("restarting…");
+    try {
+      const res = await fetch("/api/setup/restart", { method: "POST" });
+      const data = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        output?: string;
+      };
+      setBroadcast(
+        data.ok
+          ? `ok — ${data.output ?? "services restarted."}`
+          : `failed — ${data.error ?? "unknown error"}`,
+      );
+    } catch {
+      setBroadcast("network error");
     } finally {
       setBusy(false);
     }
@@ -166,44 +199,66 @@ export default function SetupPage() {
     <main
       id="main"
       style={{
-        minHeight: '100vh',
-        padding: 'clamp(1.4rem, 4vw, 2.6rem) var(--gutter)',
-        position: 'relative',
+        minHeight: "100vh",
+        padding: "clamp(1.4rem, 4vw, 2.6rem) var(--gutter)",
+        position: "relative",
       }}
     >
-      <span className="watermark" style={{ left: '78%', top: '18%', transform: 'translate(-50%, -50%)' }} aria-hidden="true">
+      <span
+        className="watermark"
+        style={{ left: "78%", top: "18%", transform: "translate(-50%, -50%)" }}
+        aria-hidden="true"
+      >
         設
       </span>
 
-      <div className="shell" style={{ maxWidth: '44rem', position: 'relative', zIndex: 1 }}>
-        <header style={{ borderBottom: '1px solid var(--line)', paddingBottom: '1rem', marginBottom: '1.4rem' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem' }}>
-            <span className="cjk" aria-hidden="true" style={{ fontSize: '1.3rem' }}>
+      <div
+        className="shell"
+        style={{ maxWidth: "44rem", position: "relative", zIndex: 1 }}
+      >
+        <header
+          style={{
+            borderBottom: "1px solid var(--line)",
+            paddingBottom: "1rem",
+            marginBottom: "1.4rem",
+          }}
+        >
+          <div
+            style={{ display: "flex", alignItems: "baseline", gap: "0.6rem" }}
+          >
+            <span
+              className="cjk"
+              aria-hidden="true"
+              style={{ fontSize: "1.3rem" }}
+            >
               設
             </span>
             <span className="label">00 · first boot</span>
           </div>
-          <h1 className="page-title" style={{ marginTop: '0.5rem' }}>
+          <h1 className="page-title" style={{ marginTop: "0.5rem" }}>
             initial configuration
           </h1>
-          <p className="note" style={{ marginTop: '0.5rem' }}>
-            one form, written once. the setup route closes itself after the .env files are written.
+          <p className="note" style={{ marginTop: "0.5rem" }}>
+            one form, written once. the setup route closes itself after the .env
+            files are written.
           </p>
         </header>
 
-        {step === 'loading' && <p className="caption">loading…</p>}
+        {step === "loading" && <p className="caption">loading…</p>}
 
-        {step === 'locked' && (
+        {step === "locked" && (
           <div className="panel">
-            <p className="note">configuration is already done. this page is closed.</p>
+            <p className="note">
+              configuration is already done. this page is closed.
+            </p>
           </div>
         )}
 
-        {step === 'password' && (
+        {step === "password" && (
           <form onSubmit={verifyPassword} className="panel stack">
             <p className="note">
-              enter the setup password set in the .env file at the repository root
-              (variable <code>setup_password</code>).
+              enter the setup password set in the .env file at the repository
+              root (variable <code>setup_password</code>).
             </p>
             <Field
               label="setup password"
@@ -212,28 +267,68 @@ export default function SetupPage() {
               onChange={setPassword}
               placeholder="········"
             />
-            {error && <span className="caption" style={{ color: 'var(--ink-bright)' }}>{error}</span>}
+            {error && (
+              <span className="caption" style={{ color: "var(--ink-bright)" }}>
+                {error}
+              </span>
+            )}
             <div>
-              <button type="submit" className="btn btn--solid" disabled={busy || !password}>
-                {busy ? 'checking…' : 'continue'}
+              <button
+                type="submit"
+                className="btn btn--solid"
+                disabled={busy || !password}
+              >
+                {busy ? "checking…" : "continue"}
               </button>
             </div>
           </form>
         )}
 
-        {step === 'form' && (
+        {step === "form" && (
           <form onSubmit={submit} className="stack">
             <section className="panel stack">
               <div className="panel__head">
                 <h2 className="panel__title">discord</h2>
                 <span className="label">portal → applications</span>
               </div>
-              <Field label="client id" value={form.clientId} onChange={set('clientId')} placeholder="123456789012345678" hint="general information → application id" />
-              <Field label="client secret" value={form.clientSecret} onChange={set('clientSecret')} hint="oauth2 → client secret" />
-              <Field label="bot token" value={form.token} onChange={set('token')} hint="bot → token" />
-              <Field label="your discord id (owner)" value={form.ownerId} onChange={set('ownerId')} placeholder="123456789012345678" hint="developer mode → copy id" />
-              <Field label="public key" value={form.publicKey} onChange={set('publicKey')} hint="general information → public key" />
-              <Field label="test server id (optional)" value={form.devGuildId} onChange={set('devGuildId')} hint="commands register instantly there in dev" />
+              <Field
+                label="client id"
+                value={form.clientId}
+                onChange={set("clientId")}
+                placeholder="123456789012345678"
+                hint="general information → application id"
+              />
+              <Field
+                label="client secret"
+                value={form.clientSecret}
+                onChange={set("clientSecret")}
+                hint="oauth2 → client secret"
+              />
+              <Field
+                label="bot token"
+                value={form.token}
+                onChange={set("token")}
+                hint="bot → token"
+              />
+              <Field
+                label="your discord id (owner)"
+                value={form.ownerId}
+                onChange={set("ownerId")}
+                placeholder="123456789012345678"
+                hint="developer mode → copy id"
+              />
+              <Field
+                label="public key"
+                value={form.publicKey}
+                onChange={set("publicKey")}
+                hint="general information → public key"
+              />
+              <Field
+                label="test server id (optional)"
+                value={form.devGuildId}
+                onChange={set("devGuildId")}
+                hint="commands register instantly there in dev"
+              />
             </section>
 
             <section className="panel stack">
@@ -241,9 +336,25 @@ export default function SetupPage() {
                 <h2 className="panel__title">database</h2>
                 <span className="label">postgres</span>
               </div>
-              <Field label="postgresql url" value={form.databaseUrl} onChange={set('databaseUrl')} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
-                <button type="button" className="btn" onClick={testDb} disabled={busy}>
+              <Field
+                label="postgresql url"
+                value={form.databaseUrl}
+                onChange={set("databaseUrl")}
+              />
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.8rem",
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={testDb}
+                  disabled={busy}
+                >
                   test connection
                 </button>
                 {dbTest && <span className="caption">{dbTest}</span>}
@@ -259,19 +370,19 @@ export default function SetupPage() {
                 label="owner password (dashboard)"
                 type="password"
                 value={form.ownerPassword}
-                onChange={set('ownerPassword')}
+                onChange={set("ownerPassword")}
                 hint="twelve characters minimum, for the owner panel"
               />
               <Field
                 label="session secret"
                 value={form.sessionSecret}
-                onChange={set('sessionSecret')}
+                onChange={set("sessionSecret")}
                 hint="used to sign the session cookie"
               />
               <Field
                 label="bot internal secret"
                 value={form.botInternalSecret}
-                onChange={set('botInternalSecret')}
+                onChange={set("botInternalSecret")}
                 hint="shared with the bot process"
               />
             </section>
@@ -281,37 +392,108 @@ export default function SetupPage() {
                 <h2 className="panel__title">urls</h2>
                 <span className="label">pre-filled</span>
               </div>
-              <Field label="site url" value={form.appUrl} onChange={set('appUrl')} />
-              <Field label="api url" value={form.apiUrl} onChange={set('apiUrl')} />
+              <Field
+                label="site url"
+                value={form.appUrl}
+                onChange={set("appUrl")}
+              />
+              <Field
+                label="api url"
+                value={form.apiUrl}
+                onChange={set("apiUrl")}
+              />
             </section>
 
-            {error && <span className="caption" style={{ color: 'var(--ink-bright)' }}>{error}</span>}
+            {error && (
+              <span className="caption" style={{ color: "var(--ink-bright)" }}>
+                {error}
+              </span>
+            )}
 
             <div>
               <button type="submit" className="btn btn--solid" disabled={busy}>
-                {busy ? 'writing…' : 'write the configuration'}
+                {busy ? "writing…" : "write the configuration"}
               </button>
             </div>
           </form>
         )}
 
-        {step === 'done' && (
+        {step === "done" && (
           <section className="panel stack">
             <div className="panel__head">
               <h2 className="panel__title">written</h2>
               <span className="label">done</span>
             </div>
             <p className="note">
-              <code>.env</code> at the root and <code>apps/web/.env.local</code> have been written.
+              <code>.env</code> at the root and <code>apps/web/.env.local</code>{" "}
+              have been written.
             </p>
-            <div style={{ border: '1px solid var(--line-soft)', background: 'var(--plate-frame)', padding: '0.7rem' }}>
-              <pre className="terminal__body" style={{ minHeight: 0, padding: 0, margin: 0, fontSize: '0.7rem' }}>{`pnpm dev
+            <div
+              style={{
+                border: "1px solid var(--line-soft)",
+                background: "var(--plate-frame)",
+                padding: "0.7rem",
+              }}
+            >
+              <pre
+                className="terminal__body"
+                style={{
+                  minHeight: 0,
+                  padding: 0,
+                  margin: 0,
+                  fontSize: "0.7rem",
+                }}
+              >{`pnpm dev
 
 # then, in another terminal
 pnpm db:push`}</pre>
             </div>
+            <div className="stack">
+              <p className="note">
+                now reload the API and the bot so they read the new{" "}
+                <code>.env</code>. on the server:
+              </p>
+              <div
+                style={{
+                  border: "1px solid var(--line-soft)",
+                  background: "var(--plate-frame)",
+                  padding: "0.7rem",
+                }}
+              >
+                <pre
+                  className="terminal__body"
+                  style={{
+                    minHeight: 0,
+                    padding: 0,
+                    margin: 0,
+                    fontSize: "0.7rem",
+                  }}
+                >
+                  {restartCommand ||
+                    "pm2 restart pinguin-api pinguin-bot --update-env"}
+                </pre>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.6rem",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <button type="button" onClick={restartServices} disabled={busy}>
+                  {busy ? "restarting…" : "restart api + bot"}
+                </button>
+                {broadcast && <span className="caption">{broadcast}</span>}
+              </div>
+              <p className="note">
+                the button only works when setup runs on the same machine as
+                pm2; otherwise use the command above.
+              </p>
+            </div>
             <p className="note">
-              add the callback url in the discord portal: <code>{form.appUrl}/auth/callback</code>
+              add the callback url in the discord portal:{" "}
+              <code>{form.appUrl}/auth/callback</code>
             </p>
           </section>
         )}
