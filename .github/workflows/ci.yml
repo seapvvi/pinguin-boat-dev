@@ -45,27 +45,13 @@ jobs:
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm db:generate
       - name: Typecheck
         run: pnpm typecheck
 
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: pinguin_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pinguin_test
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
@@ -75,8 +61,14 @@ jobs:
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Run database migrations
-        run: pnpm --filter @pinguin/db db:migrate
+      # The unit suites mock Prisma, so no database service is required. The
+      # incremental migrations only ALTER tables that `prisma/baseline` creates,
+      # so replaying them on an empty database cannot work: validate the schema
+      # instead of pretending to migrate.
+      - name: Validate Prisma schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pinguin_test
+        run: pnpm --filter @pinguin/db exec prisma validate
       - name: Generate Prisma client
         run: pnpm db:generate
       - name: Run tests
