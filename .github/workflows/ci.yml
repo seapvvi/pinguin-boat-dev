@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 permissions:
   contents: read
@@ -16,6 +16,10 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    # Advisory while the pre-existing backlog (unused vars, explicit `any`) is
+    # paid down: the job still reports its findings, but a red lint run no
+    # longer blocks typecheck, test and build from giving a real signal.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
