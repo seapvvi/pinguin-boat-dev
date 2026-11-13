@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import {
   Sparkles, Plus, Trash2, Eye, EyeOff, Edit3,
   FileText, Calendar

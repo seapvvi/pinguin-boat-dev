@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import { Search, Ban, ChevronLeft, ChevronRight, Settings, ShieldAlert } from 'lucide-react';
 import { Card, Input, Button, Badge, Skeleton, EmptyState, ErrorMessage, Modal, Select, Table } from '@pinguin/ui';
 import type { Column } from '@pinguin/ui';

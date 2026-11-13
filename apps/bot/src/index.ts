@@ -12,6 +12,7 @@ import { stopAllNotificationCrons } from './services/economy-notifications';
 import { stopAllInactivityAlertCrons } from './services/ticket-inactivity-alert';
 import { stopPollCron } from './services/poll-cron';
 import { stopStreamNotificationCron } from './services/stream-notifications';
+import { stopGuildSync } from './events/ready';
 import { logger } from '@pinguin/shared';
 import './interactions';
 
@@ -88,6 +89,7 @@ async function shutdown(): Promise<void> {
   logger.info('Arrêt...', { app: 'bot' });
   try {
     // 1. Stop background work so no new DB writes or Discord calls start.
+    stopGuildSync();
     stopAllInterestCrons();
     stopAllNotificationCrons();
     stopAllInactivityAlertCrons();

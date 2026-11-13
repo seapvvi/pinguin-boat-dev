@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import { Swords, Users, Sliders, AlertTriangle, DatabaseBackup } from 'lucide-react';
 import { Toggle, Input, Select, Button } from '@pinguin/ui';
 import { ErrorMessage } from '@pinguin/ui';

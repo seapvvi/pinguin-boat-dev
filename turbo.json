@@ -12,7 +12,7 @@
   ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build", "@pinguin/db#db:generate"],
+      "dependsOn": ["^build"],
       "outputs": [".next/**", "dist/**", "!.next/cache/**"],
       "env": [
         "NEXT_PUBLIC_API_URL",
@@ -25,9 +25,11 @@
       "persistent": true
     },
     "lint": {
+      "inputs": ["$TURBO_DEFAULT$", "eslint.config.mjs", "../../eslint.config.mjs"],
       "outputs": []
     },
     "typecheck": {
+      "inputs": ["$TURBO_DEFAULT$", "tsconfig.json", "../../tsconfig.json"],
       "outputs": []
     },
     "clean": {
@@ -46,6 +48,7 @@
       "cache": false
     },
     "test": {
+      "inputs": ["$TURBO_DEFAULT$", "vitest.config.ts", "../../vitest.config.ts"],
       "outputs": ["coverage/**"],
       "cache": false
     }

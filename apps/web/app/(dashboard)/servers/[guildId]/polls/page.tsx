@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import {
   Vote, BarChart3, X, Plus as PlusIcon,
   Trash2, CheckCircle, Clock

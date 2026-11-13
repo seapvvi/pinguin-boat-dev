@@ -1,9 +1,10 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma, AuditAction } from '@pinguin/db';
 import { getConfig } from '@pinguin/config';
 import { authenticate } from '../middleware/auth';
 import { success, error, sanitizeError } from '../utils/response';
+import { cachedJson } from '../utils/http-cache';
 import { getSystemMetrics, getGlobalStats } from '../services/metrics';
 import { botFetch } from '../services/bot-proxy';
 
@@ -47,9 +48,16 @@ export async function computePublicOverview() {
 }
 
 export async function overviewRoutes(app: FastifyInstance) {
-  app.get('/public', { preHandler: [authenticate] }, async (_request, reply) => {
+  app.get('/public', { preHandler: [authenticate] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      reply.send(success(await computePublicOverview()));
+      const data = await computePublicOverview();
+      // Volatile counters (online members) change every minute; a short private
+      // window still collapses the refetch storm when the dashboard polls.
+      cachedJson(request, reply, success(data), {
+        scope: 'private',
+        maxAgeSeconds: 30,
+        extensions: ['stale-while-revalidate=60'],
+      });
     } catch (err: unknown) {
       reply.status(500).send(error(sanitizeError(err)));
     }
@@ -145,7 +153,7 @@ export async function overviewRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get('/top-guilds', { preHandler: [authenticate] }, async (_request, reply) => {
+  app.get('/top-guilds', { preHandler: [authenticate] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const guilds = await prisma.guild.findMany({
         orderBy: { memberCount: 'desc' },
@@ -159,7 +167,11 @@ export async function overviewRoutes(app: FastifyInstance) {
           _count: { select: { moderationCases: true, xpProfiles: true } },
         },
       });
-      reply.send(success({ guilds }));
+      // Same for every member, changes on joins: a shared 60 s window is safe.
+      cachedJson(request, reply, success({ guilds }), {
+        scope: 'private',
+        maxAgeSeconds: 60,
+      });
     } catch (err: unknown) {
       reply.status(500).send(error(sanitizeError(err)));
     }

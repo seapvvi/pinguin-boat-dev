@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import {
   MessageSquare, Users, Hash, Activity
 } from 'lucide-react';

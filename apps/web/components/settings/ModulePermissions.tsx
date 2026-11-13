@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { m as motion, AnimatePresence } from 'motion/react';
 import {
   Shield, Ticket, Wallet, Trophy, DoorOpen, UserPlus, ScrollText,
   Swords, FileText, Gift, Vote, Lightbulb, Music2, ChevronDown,

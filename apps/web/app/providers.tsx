@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, type ReactNode } from 'react';
+import { LazyMotion } from 'motion/react';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+
+// Fetch the animation engine as its own chunk: `m` components render their
+// markup immediately and start animating once the feature bundle resolves.
+const loadMotionFeatures = () => import('motion/react').then((mod) => mod.domAnimation);
 
 export function Providers({ children }: { children: ReactNode }) {
   const prefersReduced = useReducedMotion();
@@ -31,5 +36,5 @@ export function Providers({ children }: { children: ReactNode }) {
     return () => io.disconnect();
   }, [prefersReduced]);
 
-  return <>{children}</>;
+  return <LazyMotion features={loadMotionFeatures}>{children}</LazyMotion>;
 }

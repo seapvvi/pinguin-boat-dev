@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { m as motion, AnimatePresence } from 'motion/react';
 import { X, ChevronLeft, ChevronRight, SkipForward } from 'lucide-react';
 import { Button } from '@pinguin/ui';
 import { StepLogs } from './steps/StepLogs';

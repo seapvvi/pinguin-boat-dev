@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
+import { m as motion, AnimatePresence } from 'motion/react';
 import { DatabaseBackup, RotateCcw, Trash2, Plus, Crown } from 'lucide-react';
 import { Button } from '@pinguin/ui';
 import { api, fetchGuildSettings } from '@/lib/api';

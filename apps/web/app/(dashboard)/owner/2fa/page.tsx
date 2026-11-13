@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import {
   Shield, ShieldCheck, ShieldOff, Key, Smartphone,
   CheckCircle, XCircle, RefreshCw

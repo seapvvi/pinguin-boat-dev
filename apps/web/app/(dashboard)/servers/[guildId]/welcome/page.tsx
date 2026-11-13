@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import { Image, Mail, LogOut, Eye, Palette, UserPlus, LogIn, Loader2, Check } from 'lucide-react';
 import { Toggle, Input, Button, Badge } from '@pinguin/ui';
 import { ErrorMessage } from '@pinguin/ui';

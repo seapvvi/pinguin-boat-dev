@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import {
   Server, Play, RotateCcw, Activity, CheckCircle,
   XCircle, Clock, Terminal, RefreshCw

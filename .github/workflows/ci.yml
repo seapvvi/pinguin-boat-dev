@@ -29,6 +29,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Lint
         run: pnpm lint
+      - name: No stray or temporary files tracked
+        run: pnpm check:stray
 
   typecheck:
     runs-on: ubuntu-latest

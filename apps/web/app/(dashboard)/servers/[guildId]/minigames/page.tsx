@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import { Gamepad2, Coins, Trophy, Dice1, Dice2, Swords, Target, Dices, Brain, Table2, Rocket } from 'lucide-react';
 import { Button, Skeleton, EmptyState, ErrorMessage, Input, Toggle } from '@pinguin/ui';
 import {

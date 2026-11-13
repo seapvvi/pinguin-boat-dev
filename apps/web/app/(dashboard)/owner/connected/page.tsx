@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import { Users, RefreshCw, LogOut, Megaphone, Clock, Send } from 'lucide-react';
 import { Card, Button, Skeleton, EmptyState, Input, Modal } from '@pinguin/ui';
 import { api } from '@/lib/api';

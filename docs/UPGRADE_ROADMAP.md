@@ -1,6 +1,6 @@
 # Pinguin BOAT — Upgrade Roadmap
 
-> Audit-based plan · 2026-11-12 · **reconciled with the code on 2026-11-12**
+> Audit-based plan · 2026-11-12 · **reconciled with the code on 2026-11-13**
 >
 > Status key: `[x]` shipped · `[~]` partial, see the item note · `[ ]` not started.
 > Evidence lines describe the state **at audit time**; items marked done were
@@ -17,15 +17,15 @@ Audited figures, with the reconciled value where it changed:
 | Metric | Audit | Now |
 |---|---|---|
 | Dashboard pages | 50 | 50 |
-| Pages using `'use client'` | 49 | 52 (RSC migration still open, W1) |
+| Pages using `'use client'` | 49 | 49 of 50 (+2 client error boundaries, W1) |
 | Guild routes in `guild/index.ts` | 36 | 36 |
 | Owner routes in `owner.ts` | 60+ | 60+, all POSTs idempotency-aware (A10) |
-| Prisma schema | 1,876 lines | 1,900 (idempotency, 2FA recovery codes) |
+| Prisma schema | 1,876 lines | 1,893 (idempotency, 2FA recovery codes, explicit cascades) |
 | Prisma migrations | 8 | 10 |
 | Redis / shared cache | none | none (`docker-compose.yml` ships a Redis service, unused) |
 | Bot processes | 1 (no sharding) | 1 |
-| Test files | ~14 | 19 (web app now has a runner) |
-| `loading.tsx` / `error.tsx` / `not-found.tsx` | none | none (still open, W1) |
+| Test files | ~14 | 20 (web app now has a runner) |
+| `loading.tsx` / `error.tsx` / `not-found.tsx` | none | 6 route files (W1, partial) |
 
 ---
 
@@ -46,7 +46,7 @@ Suggested workflow: turn each item into a GitHub issue, label it with the area a
 
 | # | Upgrade | Why | Status |
 |---|---|---|---|
-| 01 | Repair `deploy/pm2.config.json` | The file contains a duplicated apps block after the closing bracket — invalid JSON, so `pm2 start` fails. | `[x]` |
+| 01 | Repair the PM2 config (`deploy/pm2.config.js`) | The file contained a duplicated apps block after the closing bracket — invalid JSON, so `pm2 start` failed. | `[x]` |
 | 02 | Add `@fastify/compress` | Every JSON response is uncompressed; guild settings payloads are large. Brotli cuts 60–80%. | `[x]` |
 | 03 | Stop the silent demo-data fallback | `apiGet` returns fake data on any error, so a 500 looks like real data. Gate it to preview mode. | `[x]` |
 | 04 | Add composite indexes | `audit_logs`, `moderation_cases` and `economy_transactions` lack the indexes their queries use. | `[x]` |
@@ -67,23 +67,26 @@ health split into `/health/live` and `/health/ready`.
 
 Shipped: `/api/overview` N+1 removed (A3), guild-config cache with invalidation
 (A2/B2), XP hot path single-transaction + cached rewards (B1), durable music
-queue with rehydration (B3), `next/image` with AVIF/WebP (W5), session auth
-cache (A4), Discord REST queue with 429/backoff/circuit breaker (B6), DB
-pooling (D6).
+queue with rehydration (B3), `next/image` with AVIF/WebP and code-split charts,
+confetti and motion (W5/W6), session auth cache (A4), Discord REST queue with
+429/backoff/circuit breaker (B6), DB pooling (D6), server-side ETag +
+`Cache-Control` on the stable reads (A12).
 
-Open: RSC dashboard (W1), shared query layer (W2), code-splitting recharts and
-motion (W6), Redis (I3) — a compose service exists but nothing connects to it.
+Open: RSC dashboard pages (W1, boundaries landed), shared query layer (W2),
+Redis (I3) — a compose service exists but nothing connects to it.
 
 ### Phase 2 — Experience `[~]`
 
-Shipped this round: ⌘K command palette (W7), log retention (D3), owner 2FA
-recovery codes + brute-force alert (S1), idempotency keys on owner POSTs (A10),
-input validation on guild routes with unknown-key stripping (A8), runbook and
-env reference sections (I10).
+Shipped: ⌘K command palette (W7), log retention (D3), owner 2FA recovery codes +
+brute-force alert (S1), idempotency keys on owner POSTs (A10), input validation
+on guild routes with unknown-key stripping (A8), runbook and env reference
+sections (I10), welcome/rank card cache (B9), SSRF guard on remote card images
+(S5), ETag + `Cache-Control` on stable reads (A12), explicit `onDelete` on every
+relation (D5), route boundaries (W1), stray-file CI guard (I6).
 
 Open: bulk actions (W8), real-time dashboard (W9), design-system consolidation
-(W10), accessibility pass (W11), music rewrite (B4), SSRF guard (S5), owner
-mutation audit coverage (S6).
+(W10), accessibility pass (W11), music rewrite (B4), cursor pagination on the
+remaining list endpoints (A12), owner mutation audit coverage (S6).
 
 ### Phase 3 — Scale `[ ]`
 
@@ -170,7 +173,7 @@ row retention), API versioning (A15), history-based rate limiting.
 - [x] Fix the XP hot path and cache config
 - [x] Make the music queue durable
 - [ ] Move the dashboard to RSC + a shared query layer
-- [~] Add `next/image` and code-split heavy libraries
+- [x] Add `next/image` and code-split heavy libraries
 - [~] Introduce Redis and configure DB pooling
 
 ### Phase 2 — Experience (weeks 4–6) `[~]`
@@ -215,9 +218,9 @@ row retention), API versioning (A15), history-based rate limiting.
 | W14 | P2 | 3 | L | 3 | Theme system and i18n |
 | W15 | P2 | 1 | S | 0 | Remove stray files and dead config |
 
-#### [ ] W1 · Move the dashboard to Server Components
+#### [~] W1 · Move the dashboard to Server Components
 
-**P0 · impact 5/5 · effort L · phase 1 · status `[ ]`** — not started: no loading/error/not-found files exist yet (W1)
+**P0 · impact 5/5 · effort L · phase 1 · status `[~]`** — route boundaries added (`loading.tsx`, `error.tsx`, `not-found.tsx` for the dashboard group, `servers/[guildId]/loading.tsx`, plus root `error.tsx`/`not-found.tsx`); the 49 client pages still fetch in `useEffect`, so the RSC conversion itself is open
 
 - **Why:** 49 of 50 pages start with `'use client'` and fetch data in `useEffect` after hydration (`dashboard/page.tsx:36`). Every visit pays a spinner and a client bundle before content appears.
 - **Do:** fetch on the server, stream with `Suspense`, keep only interactive islands as client components. Add `loading.tsx`, `error.tsx` and `not-found.tsx` boundaries per route.
@@ -249,15 +252,15 @@ row retention), API versioning (A15), history-based rate limiting.
 
 #### [x] W5 · Use `next/image`
 
-**P1 · impact 4/5 · effort M · phase 1 · status `[x]`** — shipped: Discord CDN images use next/image; AVIF+WebP on; user URLs stay unoptimized
+**P1 · impact 4/5 · effort M · phase 1 · status `[x]`** — shipped: Discord CDN and user-supplied embed images go through `next/image` with AVIF/WebP; local SVG plates keep `<img>` on purpose (already sized, lazy, part of the static shell)
 
 - **Why:** 17 raw `<img>` tags and zero `next/image` usages, even though `images.remotePatterns` is configured for `cdn.discordapp.com`.
 - **Do:** replace raw `img` with `next/image`, add `sizes` and lazy loading, set `referrerPolicy`, and serve AVIF/WebP.
 - **Evidence:** 17 `<img>` / 0 `next/image`; `apps/web/next.config.js:8-16`.
 
-#### [ ] W6 · Code-split recharts, confetti and motion
+#### [x] W6 · Code-split recharts, confetti and motion
 
-**P1 · impact 4/5 · effort S · phase 1 · status `[ ]`** — not started: 5 dynamic imports today
+**P1 · impact 4/5 · effort S · phase 1 · status `[x]`** — shipped: every chart is a `next/dynamic` import, `canvas-confetti` loads on first use, and `motion` runs through `LazyMotion` + `m` with an async feature bundle in `app/providers.tsx`
 
 - **Why:** charts, `canvas-confetti` and `motion` are imported eagerly on dashboard pages; only 6 dynamic imports exist across the app.
 - **Do:** use `next/dynamic` for below-the-fold charts, confetti and animation. Keep motion in small client islands only where interaction needs it.
@@ -329,7 +332,7 @@ row retention), API versioning (A15), history-based rate limiting.
 
 #### [x] W15 · Remove stray files and dead config
 
-**P2 · impact 1/5 · effort S · phase 0 · status `[x]`** — stray files (___temp_fix_guard.tsx, middleware.ts.bak) are gone; no CI guard yet
+**P2 · impact 1/5 · effort S · phase 0 · status `[x]`** — shipped: tracked scratch files removed (`.gg-tmp-roadmap.py`, `__pycache__/*.pyc`, `tools/_tmp/plates.bak`) and `scripts/check-stray-files.mjs` runs in CI as `pnpm check:stray`
 
 - **Why:** the repo contains `economy/___temp_fix_guard.tsx`, `middleware.ts.bak` and `.gg-check-demo.mjs` — leftover experiments that confuse navigation.
 - **Do:** delete dead files, add a `/verify` route or remove the no-op middleware, and add a CI check for TODO/temp files.
@@ -423,7 +426,7 @@ row retention), API versioning (A15), history-based rate limiting.
 
 #### [ ] A9 · Move cleanup and deploys to a worker
 
-**P1 · impact 4/5 · effort L · phase 3 · status `[ ]`** — not started: cleanup still on setInterval in the API
+**P1 · impact 4/5 · effort L · phase 3 · status `[ ]`** — not started: deploys already run in a detached worker (`services/deploy-worker.ts`), but session/ticket/retention cleanup still runs on `setInterval` inside the API
 
 - **Why:** session/ticket cleanup runs on `setInterval` inside the API, and deployments run in-process with `simple-git`. Restarts and latency spikes affect both.
 - **Do:** add a Redis-backed worker (BullMQ) or system cron for cleanup, metrics snapshots and deploys. Make the API stateless.
@@ -445,9 +448,9 @@ row retention), API versioning (A15), history-based rate limiting.
 - **Do:** add `/health/live` (process) and `/health/ready` (DB, bot internal API, Discord API, disk, memory) with timeouts and a 503 on dependency failure.
 - **Evidence:** `apps/api/src/index.ts:155-171`.
 
-#### [ ] A12 · ETags, Cache-Control and cursor pagination
+#### [~] A12 · ETags, Cache-Control and cursor pagination
 
-**P2 · impact 3/5 · effort M · phase 2 · status `[ ]`** — not started: the ETag cache exists client-side only (W3)
+**P2 · impact 3/5 · effort M · phase 2 · status `[~]`** — shipped: `utils/http-cache.ts` adds a strong ETag plus `Cache-Control` to `/api/overview/public`, `/api/overview/top-guilds`, `/api/changelogs` and `/api/stats/public`, answering 304 on `If-None-Match`; cursor pagination is still open
 
 - **Why:** read endpoints have no ETag or Cache-Control; the dashboard refetches full lists on every navigation. Offset pagination is used for large tables.
 - **Do:** add ETag + `If-None-Match` for stable reads, private `max-age` for user data, and cursor pagination for audit logs, tickets and leaderboards.
@@ -554,15 +557,15 @@ row retention), API versioning (A15), history-based rate limiting.
 
 #### [x] B8 · Graceful shutdown that drains work
 
-**P1 · impact 3/5 · effort S · phase 1 · status `[x]`** — shipped: crons stopped, music flushed, client destroyed, Prisma disconnected
+**P1 · impact 3/5 · effort S · phase 1 · status `[x]`** — shipped: crons stopped, the guild-sync interval registered and stopped, music flushed, client destroyed, Prisma disconnected
 
 - **Why:** `shutdown()` destroys the client and disconnects Prisma but does not stop intervals, destroy voice connections/players, or flush buffered XP.
 - **Do:** stop all music, clear intervals, flush XP/cooldowns, wait for in-flight handlers with a timeout, then destroy and exit.
 - **Evidence:** `apps/bot/src/index.ts:73-82`.
 
-#### [ ] B9 · Cache rendered welcome/rank cards
+#### [x] B9 · Cache rendered welcome/rank cards
 
-**P1 · impact 3/5 · effort S · phase 1 · status `[ ]`** — not started
+**P1 · impact 3/5 · effort S · phase 1 · status `[x]`** — shipped: LRU card cache keyed by member + settings hash (128 entries, 5 min TTL) in `services/WelcomeCardService.ts`, plus the same bounded 5 min cache for the `/rank` canvas in `commands/levels/rank.ts`
 
 - **Why:** every join loads the remote avatar and renders a 700×250 canvas with no cache. A raid of joins can saturate the event loop.
 - **Do:** add an LRU cache keyed by member + settings hash, preload common avatars, and render in a worker if p95 exceeds 100 ms.
@@ -644,7 +647,7 @@ row retention), API versioning (A15), history-based rate limiting.
 
 #### [~] D5 · Make cascade rules explicit
 
-**P1 · impact 4/5 · effort M · phase 1 · status `[~]`** — guild cascade is explicit (onDelete: Cascade on guild_id); no delete-a-guild integration test
+**P1 · impact 4/5 · effort M · phase 1 · status `[~]`** — every relation now declares `onDelete` (15 added) with `20260622000000_explicit_cascade_rules`, which flips the six user-owned per-guild rows (including `moderation_cases`) to `CASCADE`; a create-then-delete-a-guild integration test is still missing
 
 - **Why:** many child relations have no `onDelete: Cascade`. Deleting a guild will fail on Restrict relations or leave orphaned rows.
 - **Do:** audit every relation, add explicit `onDelete` (Cascade/SetNull/Restrict), and add an integration test that creates and deletes a full guild.
@@ -666,9 +669,9 @@ row retention), API versioning (A15), history-based rate limiting.
 - **Do:** use Postgres `text[]` or join tables, validate with zod, and migrate existing rows with a backfill script.
 - **Evidence:** `packages/db/prisma/schema.prisma:400-433`; `:648-687`.
 
-#### [ ] D8 · Drop redundant indexes
+#### [x] D8 · Drop redundant indexes
 
-**P1 · impact 2/5 · effort S · phase 1 · status `[ ]`** — not started
+**P1 · impact 2/5 · effort S · phase 1 · status `[x]`** — verified: no redundant `@@index` duplicates a unique constraint — `Session.token`, `PremiumSubscription.userId/guildId`, `BlacklistUser.targetId` and `PremiumPlan.name` rely on the unique index alone
 
 - **Why:** unique constraints already create indexes; extra `@@index` entries on the same columns cost writes and storage (`Session.token`, `PremiumSubscription.userId/guildId`, `BlacklistUser.targetId`).
 - **Do:** remove the redundant `@@index` lines after confirming query plans with `EXPLAIN`.
@@ -717,17 +720,17 @@ row retention), API versioning (A15), history-based rate limiting.
 | I11 | P2 | 2 | S | 1 | Windows-friendly scripts |
 | I12 | P2 | 2 | S | 2 | Tune Turbo caching |
 
-#### [x] I1 · Repair `pm2.config.json`
+#### [x] I1 · Repair the PM2 config
 
-**P0 · impact 5/5 · effort S · phase 0 · status `[x]`** — shipped: one apps array, valid JSON
+**P0 · impact 5/5 · effort S · phase 0 · status `[x]`** — shipped: one `apps` array, valid config; the file is now `deploy/pm2.config.js` with `PINGUIN_ROOT`-relative paths
 
-- **Why:** the file has a complete `apps` array, then a second copy of the same apps after the closing bracket. It is invalid JSON, so `pm2 start` fails.
+- **Why:** the file had a complete `apps` array, then a second copy of the same apps after the closing bracket. It was invalid JSON, so `pm2 start` failed.
 - **Do:** keep one `apps` array, validate JSON in CI, and pin `max_memory_restart` per process. Add a smoke check that `pm2 start --dry-run` succeeds.
-- **Evidence:** `deploy/pm2.config.json:56-110`.
+- **Evidence:** `deploy/pm2.config.js:1-60` (was `deploy/pm2.config.json`, audit time).
 
-#### [ ] I2 · Harden nginx
+#### [x] I2 · Harden nginx
 
-**P1 · impact 4/5 · effort S · phase 1 · status `[ ]`** — not started
+**P1 · impact 4/5 · effort S · phase 1 · status `[x]`** — shipped: HTTP/2, HSTS, Brotli/gzip, `client_max_body_size`, proxy timeouts, `server_tokens off` and per-surface `limit_req` zones; `server_name` stays a `votredomaine.com` placeholder on purpose
 
 - **Why:** `server_name` is `votredomaine.com`, there is no HSTS, Brotli, body limit, proxy timeout or per-IP connection limit, and one 30 r/s zone covers all API users.
 - **Do:** set the real domain, enable HTTP/2+ and Brotli, add HSTS, `client_max_body_size`, `proxy_read_timeout`, separate `limit_req` zones for auth/owner, and `server_tokens off`.
@@ -751,15 +754,15 @@ row retention), API versioning (A15), history-based rate limiting.
 
 #### [~] I5 · One-command local environment
 
-**P1 · impact 3/5 · effort M · phase 1 · status `[~]`** — compose has Postgres + Redis; no MinIO/MailHog, task runner or demo seed
+**P1 · impact 3/5 · effort M · phase 1 · status `[~]`** — compose has Postgres + Redis and a demo seed exists (`pnpm db:seed`); MinIO/MailHog and a task runner are still missing
 
 - **Why:** setup is manual: PostgreSQL, env files, Prisma generate/migrate. There is no `docker-compose` for Postgres/Redis/MinIO.
 - **Do:** add `docker-compose.yml` with Postgres, Redis, MinIO and MailHog; a make/task runner; and a seed script for realistic demo data.
-- **Evidence:** `README.md:16-26`; `packages/db/src/seed.ts`.
+- **Evidence:** `README.md:16-26`; `packages/db/src/seed.ts` (`db:seed` in `package.json`).
 
-#### [ ] I6 · Make CI enforce quality
+#### [~] I6 · Make CI enforce quality
 
-**P1 · impact 3/5 · effort S · phase 1 · status `[ ]`** — not started: no coverage gate, bundle budget, smoke test or pnpm audit in CI
+**P1 · impact 3/5 · effort S · phase 1 · status `[~]`** — stray-file guard now runs in CI (`pnpm check:stray`); coverage gate, bundle budget, Playwright smoke test and `pnpm audit` are still open
 
 - **Why:** turbo `lint` dependsOn `typecheck` (doubling the critical path), and there is no coverage gate, bundle budget, Playwright smoke test or audit step.
 - **Do:** remove the `lint → typecheck` dependency, add coverage thresholds, `pnpm audit`, a Next bundle budget, Playwright smoke tests and a Lighthouse CI budget.
@@ -799,15 +802,15 @@ row retention), API versioning (A15), history-based rate limiting.
 
 #### [~] I11 · Windows-friendly scripts
 
-**P2 · impact 2/5 · effort S · phase 1 · status `[~]`** — kill-ports.js is Node; other scripts remain bash-only
+**P2 · impact 2/5 · effort S · phase 1 · status `[~]`** — `kill-ports.js` and `dev-with-preload.js` are Node; `install.sh`, `deploy.sh`, `rollback.sh`, `backup.sh`, `update.sh` and `healthcheck.sh` remain bash-only
 
 - **Why:** several scripts are bash-only and the dev preload script spawns turbo with `shell: true`. Windows contributors hit avoidable friction.
 - **Do:** use `cross-env`/`tsx` npm scripts, move platform-specific logic to Node, or document WSL as the supported path.
-- **Evidence:** `scripts/force-kill-ports.sh`; `scripts/dev-with-preload.js`.
+- **Evidence:** `scripts/kill-ports.js`; `scripts/dev-with-preload.js`; `scripts/install.sh`.
 
 #### [~] I12 · Tune Turbo caching
 
-**P2 · impact 2/5 · effort S · phase 2 · status `[~]`** — lint no longer depends on typecheck and test is cached; inputs/outputs still coarse
+**P2 · impact 2/5 · effort S · phase 2 · status `[~]`** — `inputs` declared for `lint`, `typecheck` and `test`; tests stay uncached until they run against a seeded database
 
 - **Why:** `test` has `cache: false`, `lint` has no inputs, and outputs are not declared per package, so CI rebuilds more than necessary.
 - **Do:** declare outputs/inputs per task, cache tests with a deterministic seed, and add a remote cache for CI.
@@ -860,9 +863,9 @@ row retention), API versioning (A15), history-based rate limiting.
 - **Do:** add a nonce-based CSP in `next.config.js` or middleware, allow only needed origins (Discord CDN, API), and drop `unsafe-inline`.
 - **Evidence:** `apps/api/src/index.ts:67-83`; `apps/web/next.config.js`.
 
-#### [ ] S5 · Guard remote fetches against SSRF
+#### [x] S5 · Guard remote fetches against SSRF
 
-**P1 · impact 4/5 · effort M · phase 2 · status `[ ]`** — not started
+**P1 · impact 4/5 · effort M · phase 2 · status `[x]`** — shipped: `apps/bot/src/utils/ssrf.ts` resolves the host and rejects private/loopback/link-local/metadata addresses, non-http(s) schemes, redirects, non-image content types and payloads over 8 MB; welcome-card backgrounds go through `fetchRemoteImage`
 
 - **Why:** card backgrounds and avatars are loaded from user-supplied URLs; webhooks and pastebin also fetch remote content. Private IPs are not blocked.
 - **Do:** resolve and reject private/loopback/link-local ranges, enforce https, set timeouts and size limits, and proxy through an allowlist.
@@ -942,3 +945,29 @@ Files inspected for this plan:
 - `scripts/prisma-migrate.mjs` — non-interactive `db:migrate` (D2).
 - `packages/db/prisma/migrations/20260621000000_add_idempotency_records`,
   `20260621000100_add_owner_2fa_recovery_codes` — migrations for the above.
+
+### Files added or changed in the 2026-11-13 round
+
+- `apps/api/src/utils/http-cache.ts`, `apps/api/src/tests/http-cache.test.ts` —
+  strong ETag, `Cache-Control` policy and 304 handling (A12); applied to
+  `/api/overview/public`, `/api/overview/top-guilds`, `/api/changelogs`
+  (`apps/api/src/routes/overview.ts`) and `/api/stats/public`
+  (`apps/api/src/index.ts`).
+- `apps/web/app/(dashboard)/loading.tsx`, `error.tsx`, `not-found.tsx`,
+  `servers/[guildId]/loading.tsx`, `apps/web/app/error.tsx`,
+  `apps/web/app/not-found.tsx` — route boundaries (W1).
+- `scripts/check-stray-files.mjs`, `package.json` (`check:stray`),
+  `.github/workflows/ci.yml` — CI guard against tracked scratch files (W15).
+- `.gitignore` — `__pycache__/`, `*.pyc`, `*.bak`, `*.orig`, `*.rej`.
+- `apps/bot/src/events/ready.ts`, `apps/bot/src/index.ts` — the guild sync
+  interval is now a managed interval and is stopped on shutdown (B8).
+- `apps/bot/src/commands/levels/rank.ts` — bounded 5 min cache for rendered
+  rank cards, completing B9 alongside the welcome-card cache.
+- `apps/web/app/providers.tsx`, `apps/web/**` — `motion` now loads through
+  `LazyMotion` with an async feature bundle; all 39 call sites use
+  `m as motion` (W6).
+- `packages/db/prisma/schema.prisma`,
+  `packages/db/prisma/migrations/20260622000000_explicit_cascade_rules` — every
+  relation declares `onDelete`; the migration flips the six user-owned
+  per-guild rows (including `moderation_cases`) to `CASCADE` (D5).
+- `turbo.json` — `inputs` declared for `lint`, `typecheck` and `test` (I12).

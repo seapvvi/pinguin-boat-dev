@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useConfetti } from '@/hooks/useConfetti';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import {
   Heart, ExternalLink, Palette, MessageCircle, Star, Rocket,
   Vote, Brush, Shield, Megaphone, Users, Trophy, Medal, Lock

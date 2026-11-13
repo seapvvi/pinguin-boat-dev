@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import { Heart, Plus, Trash2 } from 'lucide-react';
 import { Card, Button, Input, Skeleton, Toggle } from '@pinguin/ui';
 import { api } from '@/lib/api';

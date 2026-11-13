@@ -1,7 +1,7 @@
 // PM2 resolves `cwd` and log paths against the directory you run `pm2` from,
 // not against this file, so every path here is absolute.
 // Override the install root with PINGUIN_ROOT, e.g.:
-//   PINGUIN_ROOT=$HOME/pinguin-boat-dev pm2 start deploy/pm2.config.json
+//   PINGUIN_ROOT=$HOME/pinguin-boat-dev pm2 start deploy/pm2.config.js
 // Defaults to the /opt layout created by scripts/install.sh.
 const root = process.env.PINGUIN_ROOT || "/opt/pinguinboat/current";
 const logs = process.env.PINGUIN_LOGS || "/opt/pinguinboat/shared/logs";

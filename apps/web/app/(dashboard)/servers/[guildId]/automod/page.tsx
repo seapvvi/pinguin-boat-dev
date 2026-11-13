@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import { Shield, AlertTriangle } from 'lucide-react';
 import { Toggle, Input, Button } from '@pinguin/ui';
 import { ErrorMessage } from '@pinguin/ui';

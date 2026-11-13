@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { motion } from 'motion/react'
+import { m as motion } from 'motion/react';
 import { Card, Select, Skeleton, Badge, Table, type Column } from '@pinguin/ui'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/utils'

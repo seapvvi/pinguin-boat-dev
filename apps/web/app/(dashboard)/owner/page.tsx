@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import {
   Server, Users, Terminal, Clock, Cpu,
   RefreshCw, RotateCcw, Save, Power, Activity,

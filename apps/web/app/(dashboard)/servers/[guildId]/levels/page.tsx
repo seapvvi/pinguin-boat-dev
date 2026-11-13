@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import {
   Plus, X, Eye, Trophy, Award, Zap, Bell, Medal, Loader2, Check
 } from 'lucide-react';

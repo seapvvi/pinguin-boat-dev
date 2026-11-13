@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { motion } from 'motion/react';
+import { m as motion } from 'motion/react';
 import {
   Star, Settings, ChevronLeft, ChevronRight, BarChart3, MessageSquare
 } from 'lucide-react';

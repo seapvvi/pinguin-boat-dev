@@ -530,7 +530,7 @@ model ModerationCase {
   updatedAt   DateTime           @updatedAt @map("updated_at")
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [discordId])
+  user  User  @relation(fields: [userId], references: [discordId], onDelete: Cascade)
 
   @@index([guildId, userId])
   @@index([guildId, moderatorId])
@@ -571,9 +571,9 @@ model Ticket {
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
   guild     Guild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  creator   User            @relation("TicketCreator", fields: [creatorId], references: [discordId])
-  category  TicketCategory? @relation(fields: [categoryId], references: [id])
-  claimedBy User?           @relation("TicketClaims", fields: [claimedById], references: [discordId])
+  creator   User            @relation("TicketCreator", fields: [creatorId], references: [discordId], onDelete: Restrict)
+  category  TicketCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  claimedBy User?           @relation("TicketClaims", fields: [claimedById], references: [discordId], onDelete: SetNull)
   claims    TicketClaim[]
 
   @@index([guildId, status])
@@ -589,7 +589,7 @@ model TicketClaim {
   claimedAt DateTime @default(now()) @map("claimed_at")
 
   ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [discordId])
+  user   User   @relation(fields: [userId], references: [discordId], onDelete: Cascade)
 
   @@unique([ticketId, userId])
   @@map("ticket_claims")
@@ -706,7 +706,7 @@ model XPProfile {
   updatedAt           DateTime            @updatedAt @map("updated_at")
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [discordId])
+  user  User  @relation(fields: [userId], references: [discordId], onDelete: Cascade)
 
   @@unique([guildId, userId])
   @@index([guildId, xp])
@@ -749,7 +749,7 @@ model EconomyWallet {
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [discordId])
+  user  User  @relation(fields: [userId], references: [discordId], onDelete: Cascade)
 
   @@unique([guildId, userId])
   @@map("economy_wallets")
@@ -887,7 +887,7 @@ model GiveawayEntry {
   joinedAt   DateTime @default(now()) @map("joined_at")
 
   giveaway Giveaway @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id])
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([giveawayId, userId])
   @@map("giveaway_entries")
@@ -925,7 +925,7 @@ model PollVote {
   createdAt   DateTime @default(now()) @map("created_at")
 
   poll Poll  @relation(fields: [pollId], references: [id], onDelete: Cascade)
-  user User? @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([pollId, userId])
   @@map("poll_votes")
@@ -949,7 +949,7 @@ model Suggestion {
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  author User  @relation(fields: [authorId], references: [discordId])
+  author User  @relation(fields: [authorId], references: [discordId], onDelete: Restrict)
 
   @@index([guildId, status])
   @@map("suggestions")
@@ -1223,9 +1223,9 @@ model PremiumSubscription {
   createdAt   DateTime           @default(now()) @map("created_at")
   updatedAt   DateTime           @updatedAt @map("updated_at")
 
-  user  User        @relation(fields: [userId], references: [id])
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   guild Guild?      @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  plan  PremiumPlan @relation(fields: [planId], references: [id])
+  plan  PremiumPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
 
   @@index([planId])
   @@map("premium_subscriptions")
@@ -1299,7 +1299,7 @@ model Changelog {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  author User? @relation(fields: [authorId], references: [id])
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@map("changelogs")
@@ -1338,7 +1338,7 @@ model DeploymentRelease {
   status       DeploymentStatus @map("status")
   createdAt    DateTime         @default(now()) @map("created_at")
 
-  deployment Deployment? @relation(fields: [deploymentId], references: [id])
+  deployment Deployment? @relation(fields: [deploymentId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@map("deployment_releases")
@@ -1355,7 +1355,7 @@ model AuditLog {
   createdAt DateTime    @default(now()) @map("created_at")
 
   guild Guild? @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  user  User?  @relation(fields: [userId], references: [id])
+  user  User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([guildId, createdAt])

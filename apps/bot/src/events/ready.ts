@@ -9,10 +9,23 @@ import { startPollCron } from '../services/poll-cron';
 import { initializeInviteCache } from '../services/invite-cache';
 import { loadQueueFromDb } from '../services/music';
 import { cleanupVoiceTimers } from './voiceStateUpdate';
+import { startManagedInterval, stopManagedInterval } from '../utils/intervals';
 import { logger } from '@pinguin/shared';
 
 export const name = 'ready';
 export const once = true;
+
+/**
+ * Periodic guild sync. The handle is kept so `shutdown()` can stop it instead
+ * of leaving a timer that keeps writing to Postgres while the client is gone.
+ */
+let guildSyncInterval: NodeJS.Timeout | null = null;
+
+export function stopGuildSync(): void {
+  if (!guildSyncInterval) return;
+  stopManagedInterval(guildSyncInterval);
+  guildSyncInterval = null;
+}
 
 export async function execute(client: Client): Promise<void> {
   const config = getConfig();
@@ -58,7 +71,8 @@ export async function execute(client: Client): Promise<void> {
   }
 
   // Sync memberCount périodique
-  setInterval(async () => {
+  stopGuildSync();
+  guildSyncInterval = startManagedInterval(async () => {
     for (const guild of client.guilds.cache.values()) {
       try {
         await prisma.guild.update({

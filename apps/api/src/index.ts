@@ -27,6 +27,7 @@ import type { RouteOptions } from 'fastify';
 import { idempotency, idempotent } from './middleware/idempotency';
 import { checkMaintenance } from './middleware/maintenanceCheck';
 import { success, error, paginated, sanitizeError, getErrorMessage } from './utils/response';
+import { cachedJson } from './utils/http-cache';
 import { ensureOwnerPasswordHash } from './services/ownerPassword';
 import { getSystemMetrics, getGlobalStats } from './services/metrics';
 import { botFetch } from './services/bot-proxy';
@@ -332,7 +333,7 @@ async function main() {
     limit: z.coerce.number().int().min(1).max(50).default(10),
   });
 
-  app.get('/api/stats/public', async (_request: FastifyRequest, reply: FastifyReply) => {
+  app.get('/api/stats/public', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const [guildCount, memberAgg, commandCount] = await Promise.all([
         prisma.guild.count({ where: { botPresent: true } }),
@@ -342,11 +343,18 @@ async function main() {
         }),
         prisma.auditLog.count(),
       ]);
-      reply.send(success({
-        totalGuilds: guildCount,
-        totalUsers: memberAgg._sum.memberCount ?? 0,
-        totalCommands: commandCount,
-      }));
+      // Anonymous, identical for every visitor: let browsers and proxies reuse
+      // it for a minute instead of recomputing three counts per page view.
+      cachedJson(
+        request,
+        reply,
+        success({
+          totalGuilds: guildCount,
+          totalUsers: memberAgg._sum.memberCount ?? 0,
+          totalCommands: commandCount,
+        }),
+        { scope: 'public', maxAgeSeconds: 60, extensions: ['stale-while-revalidate=300'] },
+      );
     } catch (err: unknown) {
       reply.status(500).send(error(sanitizeError(err)));
     }
@@ -437,7 +445,11 @@ async function main() {
         }),
         prisma.changelog.count({ where: { published: true } }),
       ]);
-      reply.send(paginated(entries, total, query.page, query.limit));
+      // Published entries change rarely, and every reader sees the same list.
+      cachedJson(request, reply, paginated(entries, total, query.page, query.limit), {
+        scope: 'private',
+        maxAgeSeconds: 60,
+      });
     } catch (err: unknown) {
       reply.status(500).send(error(sanitizeError(err)));
     }

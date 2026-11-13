@@ -11,3 +11,10 @@ turbo/.cache
 coverage/
 .turbo/
 *.tsbuildinfo
+
+# Python bytecode and editor/backup leftovers from the asset scripts.
+__pycache__/
+*.pyc
+*.bak
+*.orig
+*.rej

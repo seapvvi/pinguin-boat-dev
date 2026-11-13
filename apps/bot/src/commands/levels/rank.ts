@@ -4,9 +4,46 @@ import { ensureUser } from '../../services/user';
 import { errorEmbed } from '../../services/embed';
 import { calculateXpForNextLevel, getXpForCurrentLevel } from '@pinguin/shared/levelFormula';
 import { isModuleEnabled } from '../../guards/module';
-import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { logger } from '@pinguin/shared';
 import { AttachmentBuilder } from 'discord.js';
+
+// A rendered rank card only changes when one of its inputs changes, so repeated
+// `/rank` calls can reuse the PNG instead of rasterising the canvas again. The
+// cache is in-process, bounded and short-lived, like the welcome-card cache.
+const RANK_CARD_CACHE_MAX = 128;
+const RANK_CARD_CACHE_TTL_MS = 5 * 60_000;
+const rankCardCache = new Map<string, { buffer: Buffer; expiresAt: number }>();
+
+function rankCardCacheKey(
+  avatarUrl: string,
+  username: string,
+  level: number,
+  currentXp: number,
+  requiredXp: number,
+  rank: number,
+  levelColor: string,
+): string {
+  return JSON.stringify([avatarUrl, username, level, currentXp, requiredXp, rank, levelColor]);
+}
+
+function readRankCardCache(key: string): Buffer | null {
+  const entry = rankCardCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    rankCardCache.delete(key);
+    return null;
+  }
+  return entry.buffer;
+}
+
+function writeRankCardCache(key: string, buffer: Buffer): void {
+  if (rankCardCache.size >= RANK_CARD_CACHE_MAX) {
+    const oldest = rankCardCache.keys().next().value;
+    if (oldest) rankCardCache.delete(oldest);
+  }
+  rankCardCache.set(key, { buffer, expiresAt: Date.now() + RANK_CARD_CACHE_TTL_MS });
+}
 
 export const data = new SlashCommandBuilder()
   .setName('rank')
@@ -15,7 +52,7 @@ export const data = new SlashCommandBuilder()
 
 export const module = 'levels';
 
-export async function execute(interaction: ChatInputCommandInteraction, client: Client): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, _client: Client): Promise<void> {
   await interaction.deferReply();
 
   const targetUser = interaction.options.get('user')?.user ?? interaction.user;
@@ -95,6 +132,10 @@ async function generateRankCard(
   rank: number,
   levelColor: string
 ): Promise<Buffer> {
+  const cacheKey = rankCardCacheKey(avatarUrl, username, level, currentXp, requiredXp, rank, levelColor);
+  const cached = readRankCardCache(cacheKey);
+  if (cached) return cached;
+
   const width = 900;
   const height = 280;
 
@@ -199,5 +240,7 @@ async function generateRankCard(
   ctx.fillText(`${(progress * 100).toFixed(1)}%`, barX + barWidth, barY - 10);
   ctx.textAlign = 'left';
 
-  return canvas.toBuffer('image/png');
+  const buffer = canvas.toBuffer('image/png');
+  writeRankCardCache(cacheKey, buffer);
+  return buffer;
 }
