@@ -52,6 +52,24 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # The suites import modules that read the validated config at load time, so
+    # CI needs the same keys a local `.env` provides. Values are throwaway.
+    env:
+      NODE_ENV: test
+      DISCORD_CLIENT_ID: '000000000000000000'
+      DISCORD_CLIENT_SECRET: test-client-secret
+      DISCORD_TOKEN: test-token
+      DISCORD_OWNER_ID: '000000000000000000'
+      DISCORD_PUBLIC_KEY: test-public-key
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pinguin_test
+      SESSION_SECRET: test-session-secret-0123456789abcdef
+      API_URL: http://localhost:4000
+      BOT_INTERNAL_SECRET: test-bot-internal-secret-0123456789ab
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_DISCORD_CLIENT_ID: '000000000000000000'
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      OWNER_PASSWORD: test-owner-password
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
@@ -66,8 +84,6 @@ jobs:
       # so replaying them on an empty database cannot work: validate the schema
       # instead of pretending to migrate.
       - name: Validate Prisma schema
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pinguin_test
         run: pnpm --filter @pinguin/db exec prisma validate
       - name: Generate Prisma client
         run: pnpm db:generate
