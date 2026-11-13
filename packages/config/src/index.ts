@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { z } from "zod";
 import dotenv from "dotenv";
 import path from "path";
@@ -26,8 +26,30 @@ function findEnvFile(): string | undefined {
 }
 
 const envFile = findEnvFile();
+// `ls -l` gives every stat field but the device, and it doubles as the read time.
+let envStamp = envFile ? statSync(envFile).mtimeMs : undefined;
 
 if (envFile) dotenv.config({ path: envFile });
+
+/**
+ * Reload .env when it changed after this module first read it, and only when a
+ * required key is still blank: /setup writes the file under a running process,
+ * and without this a value set too late could never reach an import-time reader.
+ */
+function reloadEnvIfStale(): boolean {
+  if (!envFile || !envStamp) return false;
+  let stamp: number;
+  try {
+    stamp = statSync(envFile).mtimeMs;
+  } catch {
+    return false;
+  }
+  if (stamp <= envStamp) return false;
+  envStamp = stamp;
+  // force: the first read already set the blank values dotenv would otherwise keep.
+  dotenv.config({ path: envFile, override: true });
+  return true;
+}
 
 const envSchema = z.object({
   NODE_ENV: z
@@ -224,7 +246,12 @@ let config: EnvConfig | null = null;
 export function loadConfig(): EnvConfig {
   if (config) return config;
 
-  const result = envSchema.safeParse(process.env);
+  let result = envSchema.safeParse(process.env);
+  if (!result.success && reloadEnvIfStale()) {
+    // A stale process must not keep answering with the old (blank) values.
+    config = null;
+    result = envSchema.safeParse(process.env);
+  }
   if (!result.success) {
     console.error("Configuration invalide :");
     for (const issue of result.error.issues) {
