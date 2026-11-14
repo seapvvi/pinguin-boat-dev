@@ -19,6 +19,27 @@ describe("log retention", () => {
     ).toBe(7);
   });
 
+  it("keeps the documented env key for the music history table", () => {
+    // The table is music_history_entries, but the documented env key stays
+    // MUSIC_HISTORY_RETENTION_DAYS.
+    expect(retentionEnvKey("music_history_entries")).toBe(
+      "MUSIC_HISTORY_RETENTION_DAYS",
+    );
+    expect(
+      retentionDays("music_history_entries", {
+        MUSIC_HISTORY_RETENTION_DAYS: "30",
+      }),
+    ).toBe(30);
+  });
+
+  it("targets tables that exist in the schema", () => {
+    // Every rule must name a real table, otherwise the cleanup job fails with
+    // a "relation does not exist" error on every run.
+    const tables = RETENTION_RULES.map((r) => r.table);
+    expect(tables).toContain("music_history_entries");
+    expect(tables).not.toContain("music_history");
+  });
+
   it("disables pruning with 0, a negative or a non-numeric value", () => {
     expect(
       retentionDays("audit_logs", { AUDIT_LOGS_RETENTION_DAYS: "0" }),

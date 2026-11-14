@@ -23,6 +23,11 @@ const BANNED_PATH_PATTERNS = [
   // Scratch files from a previous editing session.
   /(^|\/)\.gg-tmp[^/]*$/,
   /(^|\/)___temp[^/]*$/,
+  // Compiled output emitted next to the sources by a stray `tsc` run. These
+  // shadow the TypeScript sources at bundle time (Vite and webpack resolve
+  // ".js" before ".ts"), so a stale copy would be shipped instead of the
+  // source it was built from.
+  /^packages\/[^/]+\/src\/.*\.js(\.map)?$/,
 ];
 
 /** Directories that are allowed to contain generated Python bytecode. */
@@ -35,7 +40,9 @@ try {
     maxBuffer: 32 * 1024 * 1024,
   });
 } catch (err) {
-  console.error("check:stray: unable to list tracked files with `git ls-files`.");
+  console.error(
+    "check:stray: unable to list tracked files with `git ls-files`.",
+  );
   console.error(err instanceof Error ? err.message : err);
   process.exit(2);
 }

@@ -85,7 +85,7 @@ pruning for that table.
 | `AUDIT_LOGS_RETENTION_DAYS` | `180` | `audit_logs` (older than N days) |
 | `OWNER_LOGS_RETENTION_DAYS` | `365` | `owner_logs` |
 | `SYSTEM_METRICS_SNAPSHOTS_RETENTION_DAYS` | `30` | `system_metrics_snapshots` |
-| `MUSIC_HISTORY_RETENTION_DAYS` | `180` | `music_history` |
+| `MUSIC_HISTORY_RETENTION_DAYS` | `180` | `music_history_entries` |
 
 ## Webhooks
 

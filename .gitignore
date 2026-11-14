@@ -12,6 +12,13 @@ coverage/
 .turbo/
 *.tsbuildinfo
 
+# Compiled output emitted next to the sources by a stray `tsc` run. These
+# shadow the TypeScript sources at bundle time (Vite and webpack resolve
+# ".js" before ".ts"), so a stale copy would be shipped instead of the
+# source it was built from.
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+
 # Python bytecode and editor/backup leftovers from the asset scripts.
 __pycache__/
 *.pyc

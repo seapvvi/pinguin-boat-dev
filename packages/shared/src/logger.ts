@@ -1,6 +1,6 @@
-import pino, { type Logger as PinoLogger } from 'pino';
+import pino, { type Logger as PinoLogger } from "pino";
 
-export type LoggerLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LoggerLevel = "debug" | "info" | "warn" | "error";
 
 export interface LoggerContext {
   guildId?: string;
@@ -20,39 +20,76 @@ export interface BotLogger {
   child(bindings: Record<string, unknown>): BotLogger;
 }
 
-const isServer = typeof process !== 'undefined' && process.release?.name === 'node';
+const isServer =
+  typeof process !== "undefined" && process.release?.name === "node";
 
 function resolveLogLevel(envLevel: string | undefined): LoggerLevel {
   switch (envLevel) {
-    case 'debug':
-    case 'info':
-    case 'warn':
-    case 'error':
+    case "debug":
+    case "info":
+    case "warn":
+    case "error":
       return envLevel;
     default:
-      return 'info';
+      return "info";
+  }
+}
+
+/**
+ * Builds the logger, falling back to stdout-only when the rolling-file
+ * transport cannot be created.
+ *
+ * `pino` resolves the `pino-roll` target relative to the file that creates
+ * the logger, so a workspace where the package is not reachable from the
+ * compiled output (pnpm, a bundled dist) makes the transport unavailable.
+ * That must never take the service down, so the fallback keeps the process
+ * running and logging.
+ */
+export function createLoggerWithFallback(
+  withTransport: () => PinoLogger,
+  fallback: () => PinoLogger,
+): PinoLogger {
+  try {
+    return withTransport();
+  } catch (err) {
+    console.error(
+      "[logger] transport pino-roll indisponible, repli sur stdout:",
+      err instanceof Error ? err.message : err,
+    );
+    return fallback();
   }
 }
 
 function createBaseLogger(options?: CreateLoggerOptions): PinoLogger {
   const level = resolveLogLevel(options?.level ?? process.env.LOG_LEVEL);
-  const destination = process.env.LOG_DESTINATION ?? 'logs/pinguin.log';
+  const destination = process.env.LOG_DESTINATION ?? "logs/pinguin.log";
 
-  return pino({
+  const base = {
     level,
     base: {
       pid: process.pid,
       hostname: process.env.HOSTNAME,
     },
-    messageKey: 'msg',
+    messageKey: "msg",
     timestamp: pino.stdTimeFunctions.isoTime,
-    transport: {
-      targets: [
-        { target: 'pino/file', options: { destination: 1 } },
-        { target: 'pino-roll', options: { file: destination, frequency: 'daily', mkdir: true } },
-      ],
-    },
-  });
+  };
+
+  return createLoggerWithFallback(
+    () =>
+      pino({
+        ...base,
+        transport: {
+          targets: [
+            { target: "pino/file", options: { destination: 1 } },
+            {
+              target: "pino-roll",
+              options: { file: destination, frequency: "daily", mkdir: true },
+            },
+          ],
+        },
+      }),
+    () => pino(base),
+  );
 }
 
 function createNoopLogger(): PinoLogger {
@@ -72,10 +109,14 @@ function baseLogger(): PinoLogger {
 
 function wrapLogger(pinoLogger: PinoLogger): BotLogger {
   return {
-    debug: (msg, obj) => (obj ? pinoLogger.debug(obj, msg) : pinoLogger.debug(msg)),
-    info: (msg, obj) => (obj ? pinoLogger.info(obj, msg) : pinoLogger.info(msg)),
-    warn: (msg, obj) => (obj ? pinoLogger.warn(obj, msg) : pinoLogger.warn(msg)),
-    error: (msg, obj) => (obj ? pinoLogger.error(obj, msg) : pinoLogger.error(msg)),
+    debug: (msg, obj) =>
+      obj ? pinoLogger.debug(obj, msg) : pinoLogger.debug(msg),
+    info: (msg, obj) =>
+      obj ? pinoLogger.info(obj, msg) : pinoLogger.info(msg),
+    warn: (msg, obj) =>
+      obj ? pinoLogger.warn(obj, msg) : pinoLogger.warn(msg),
+    error: (msg, obj) =>
+      obj ? pinoLogger.error(obj, msg) : pinoLogger.error(msg),
     child: (b) => wrapLogger(pinoLogger.child(b)),
   };
 }
@@ -92,9 +133,13 @@ export function getLogger(context?: LoggerContext): BotLogger {
 }
 
 export const logger: BotLogger = {
-  debug: (msg, obj) => (obj ? baseLogger().debug(obj, msg) : baseLogger().debug(msg)),
-  info: (msg, obj) => (obj ? baseLogger().info(obj, msg) : baseLogger().info(msg)),
-  warn: (msg, obj) => (obj ? baseLogger().warn(obj, msg) : baseLogger().warn(msg)),
-  error: (msg, obj) => (obj ? baseLogger().error(obj, msg) : baseLogger().error(msg)),
+  debug: (msg, obj) =>
+    obj ? baseLogger().debug(obj, msg) : baseLogger().debug(msg),
+  info: (msg, obj) =>
+    obj ? baseLogger().info(obj, msg) : baseLogger().info(msg),
+  warn: (msg, obj) =>
+    obj ? baseLogger().warn(obj, msg) : baseLogger().warn(msg),
+  error: (msg, obj) =>
+    obj ? baseLogger().error(obj, msg) : baseLogger().error(msg),
   child: (b) => wrapLogger(baseLogger().child(b)),
 };
