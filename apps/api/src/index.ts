@@ -7,7 +7,7 @@ import helmet from "@fastify/helmet";
 import compress from "@fastify/compress";
 import { constants as zlibConstants } from "zlib";
 import { z } from "zod";
-import { getConfig } from "@pinguin/config";
+import { getConfig, type EnvConfig } from "@pinguin/config";
 import { prisma } from "@pinguin/db";
 import { authRoutes } from "./routes/auth";
 import { guildRoutes } from "./routes/guild/index";
@@ -45,9 +45,17 @@ let app: ReturnType<typeof Fastify>;
 let internalApp: ReturnType<typeof Fastify>;
 
 async function main() {
-  // Read late so a first boot without a configured .env can still serve the /setup flow.
-  const config = getConfig();
   app = Fastify({ logger: true });
+  // A fresh install has no .env yet, and /setup writes it through the web app.
+  let config: EnvConfig;
+  try {
+    config = getConfig();
+  } catch (err) {
+    app.log.error({ err }, "Configuration incomplète — en attente de /setup");
+    await waitForSetup();
+    console.log("[boot] .env complet détecté, démarrage du serveur");
+    config = getConfig();
+  }
 
   await app.register(cors, {
     origin: config.CORS_ORIGIN.split(",")
@@ -587,6 +595,42 @@ async function main() {
   startSessionCleanup();
   startTicketCleanup();
   startRetentionCleanup();
+}
+
+let setupServer: ReturnType<typeof Fastify> | undefined;
+
+/**
+ * Answer every request with 503 while the .env is incomplete and re-check it every
+ * five seconds. Exiting instead would burn PM2's restart budget before the setup
+ * page has been used, leaving the API stopped for good.
+ */
+async function waitForSetup(): Promise<void> {
+  setupServer = Fastify({ logger: { level: "warn" } });
+  setupServer.all("/*", (_request: FastifyRequest, reply: FastifyReply) => {
+    reply.status(503).send({
+      success: false,
+      error: "Configuration non terminée. Ouvrez /setup.",
+    });
+  });
+  try {
+    await setupServer.listen({
+      host: "0.0.0.0",
+      port: Number(process.env.API_PORT) || 4000,
+    });
+  } catch {
+    // Another instance may hold the port; regardless, wait for the .env rather than exit.
+  }
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    try {
+      getConfig();
+      break;
+    } catch {
+      // Still incomplete: /setup has not written the .env yet.
+    }
+  }
+  await setupServer.close();
+  console.log("[boot] port libéré");
 }
 
 main();

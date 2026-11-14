@@ -1,7 +1,3 @@
-import { getConfig } from '@pinguin/config';
-
-const config = getConfig();
-
 interface WebhookPayload {
   embeds: Array<{
     title: string;
@@ -26,24 +22,24 @@ const WEBHOOK_COLORS = {
 
 export async function sendWebhook(
   webhookUrl: string,
-  payload: WebhookPayload
+  payload: WebhookPayload,
 ): Promise<void> {
   try {
     await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
   } catch {
-    console.error('[Webhook] Échec d\'envoi du webhook');
+    console.error("[Webhook] Échec d'envoi du webhook");
   }
 }
 
 export function sendDeployNotification(
   webhookUrl: string,
-  status: 'running' | 'success' | 'failed' | 'rollback',
+  status: "running" | "success" | "failed" | "rollback",
   version: string,
-  details: string
+  details: string,
 ): void {
   const colors = {
     running: WEBHOOK_COLORS.warning,
@@ -53,22 +49,22 @@ export function sendDeployNotification(
   };
 
   const titles: Record<string, string> = {
-    running: '🚀 Déploiement en cours',
-    success: '✅ Déploiement réussi',
-    failed: '❌ Déploiement échoué',
-    rollback: '⏪ Rollback effectué',
+    running: "🚀 Déploiement en cours",
+    success: "✅ Déploiement réussi",
+    failed: "❌ Déploiement échoué",
+    rollback: "⏪ Rollback effectué",
   };
 
   sendWebhook(webhookUrl, {
     embeds: [
       {
-        title: titles[status] || 'Déploiement',
+        title: titles[status] || "Déploiement",
         description: details,
         color: colors[status] || WEBHOOK_COLORS.info,
         timestamp: new Date().toISOString(),
         fields: [
-          { name: 'Version', value: version, inline: true },
-          { name: 'Statut', value: status, inline: true },
+          { name: "Version", value: version, inline: true },
+          { name: "Statut", value: status, inline: true },
         ],
       },
     ],
@@ -78,12 +74,12 @@ export function sendDeployNotification(
 export function sendErrorNotification(
   webhookUrl: string,
   errorMessage: string,
-  context?: Record<string, unknown>
+  context?: Record<string, unknown>,
 ): void {
   sendWebhook(webhookUrl, {
     embeds: [
       {
-        title: '⚠️ Erreur détectée',
+        title: "⚠️ Erreur détectée",
         description: `\`\`\`${errorMessage.slice(0, 1900)}\`\`\``,
         color: WEBHOOK_COLORS.error,
         timestamp: new Date().toISOString(),
@@ -103,7 +99,7 @@ export function sendOwnerNotification(
   webhookUrl: string,
   title: string,
   description: string,
-  color: keyof typeof WEBHOOK_COLORS = 'info'
+  color: keyof typeof WEBHOOK_COLORS = "info",
 ): void {
   sendWebhook(webhookUrl, {
     embeds: [

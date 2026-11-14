@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { z } from "zod";
 import dotenv from "dotenv";
 import path from "path";
@@ -25,8 +25,7 @@ function findEnvFile(): string | undefined {
   return undefined;
 }
 
-const envFile = findEnvFile();
-// `ls -l` gives every stat field but the device, and it doubles as the read time.
+let envFile = findEnvFile();
 let envStamp = envFile ? statSync(envFile).mtimeMs : undefined;
 
 if (envFile) dotenv.config({ path: envFile });
@@ -37,18 +36,30 @@ if (envFile) dotenv.config({ path: envFile });
  * and without this a value set too late could never reach an import-time reader.
  */
 function reloadEnvIfStale(): boolean {
-  if (!envFile || !envStamp) return false;
+  // The file may only appear now (a setup run writes it after startup), so look
+  // for it again instead of trusting the path found at module load.
+  envFile = findEnvFile();
+  if (!envFile) return false;
   let stamp: number;
   try {
     stamp = statSync(envFile).mtimeMs;
   } catch {
     return false;
   }
-  if (stamp <= envStamp) return false;
+  if (stamp === envStamp) return false;
   envStamp = stamp;
-  // force: the first read already set the blank values dotenv would otherwise keep.
-  dotenv.config({ path: envFile, override: true });
-  return true;
+  // Fill the keys still blank (the first read set them to ""), without touching
+  // values the process already has from the environment or from its own cwd .env.
+  let replaced = false;
+  for (const [key, value] of Object.entries(
+    dotenv.parse(readFileSync(envFile)),
+  )) {
+    if (!process.env[key]) {
+      process.env[key] = value;
+      replaced = true;
+    }
+  }
+  return replaced;
 }
 
 const envSchema = z.object({

@@ -64,8 +64,16 @@ async function start() {
       }
     });
 
-    // Read late so a first boot without a configured .env can still serve the /setup flow.
-    const config = getConfig();
+    // /setup writes the .env through the web app: wait for it instead of exiting
+    // into a PM2 restart loop that can exhaust its budget before setup is done.
+    let config: ReturnType<typeof getConfig>;
+    try {
+      config = getConfig();
+    } catch {
+      config = await waitForSetup();
+      // Command registration was skipped while the config was missing.
+      await registerCommands(client);
+    }
     await client.login(config.DISCORD_TOKEN);
     logger.info("Connecté à Discord", { app: "bot" });
 
@@ -77,6 +85,21 @@ async function start() {
   } catch (error: unknown) {
     logger.error("Erreur de démarrage", { error, app: "bot" });
     process.exit(1);
+  }
+}
+
+/** Re-check the .env until it is complete; /setup writes it under a running bot. */
+async function waitForSetup(): Promise<ReturnType<typeof getConfig>> {
+  logger.warn("Configuration incomplète — en attente de /setup", {
+    app: "bot",
+  });
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    try {
+      return getConfig();
+    } catch {
+      // Still incomplete.
+    }
   }
 }
 

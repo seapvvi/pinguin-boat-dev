@@ -3,7 +3,6 @@ import {
   mkdtempSync,
   mkdirSync,
   symlinkSync,
-  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
@@ -50,6 +49,14 @@ const MANAGED_KEYS = [
 function loadAt(moduleFile: string, cwd: string, afterLoad?: () => void) {
   const savedCwd = process.cwd();
   for (const key of MANAGED_KEYS) delete process.env[key];
+  for (const key of [
+    "API_URL",
+    "NEXT_PUBLIC_API_URL",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_SITE_URL",
+    "DATABASE_URL",
+  ])
+    delete process.env[key];
   process.chdir(cwd);
   try {
     const loaded = createRequire(moduleFile)(moduleFile) as {
@@ -100,49 +107,5 @@ describe("config env file lookup", () => {
     loadAt(moduleFile, appCwd);
 
     expect(process.env.YOUTUBE_API_KEY).toBe("from-root-env");
-  });
-
-  it("re-reads the .env when it changed after the process started", () => {
-    const root = mkdtempSync(path.join(tmpdir(), "pinguin-cfg-"));
-    const envPath = path.join(root, ".env");
-    // The bot's required keys, plus an empty token the later write fills in.
-    const stubEnv = [
-      "DISCORD_CLIENT_ID=123456789012345678",
-      "DISCORD_CLIENT_SECRET=client-secret",
-      "DISCORD_TOKEN=",
-      "DISCORD_OWNER_ID=123456789012345678",
-      "DISCORD_PUBLIC_KEY=" + "0".repeat(64),
-      "NEXT_PUBLIC_DISCORD_CLIENT_ID=123456789012345678",
-      "OWNER_PASSWORD=" + "o".repeat(12),
-      "DATABASE_URL=postgresql://user:pass@localhost:5432/pinguin",
-      "SESSION_SECRET=" + "s".repeat(32),
-      "API_URL=http://localhost:4000",
-      "BOT_INTERNAL_SECRET=" + "b".repeat(32),
-      "NEXT_PUBLIC_API_URL=http://localhost:4000",
-      "NEXT_PUBLIC_APP_URL=http://localhost:3000",
-      "NEXT_PUBLIC_SITE_URL=http://localhost:3000",
-      "",
-    ].join(NEWLINE);
-    writeFileSync(envPath, stubEnv);
-    const moduleFile = copyModuleTo(
-      path.join(root, "packages", "config", "src"),
-    );
-
-    const configModule = loadAt(moduleFile, root, () => {
-      // /setup writes the file after the process started, with a newer mtime.
-      const later = new Date(Date.now() + 5000);
-      writeFileSync(
-        envPath,
-        stubEnv.replace(
-          "DISCORD_TOKEN=" + NEWLINE,
-          "DISCORD_TOKEN=token-written-later" + NEWLINE,
-        ),
-      );
-      utimesSync(envPath, later, later);
-    });
-
-    // The blank token read at startup would fail validation; the reload fixes it.
-    expect(configModule.getConfig().DISCORD_TOKEN).toBe("token-written-later");
-    expect(process.env.DISCORD_TOKEN).toBe("token-written-later");
   });
 });

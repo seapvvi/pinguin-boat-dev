@@ -1,7 +1,11 @@
-import { EmbedBuilder, ColorResolvable, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { getConfig } from '@pinguin/config';
-
-const config = getConfig();
+import {
+  EmbedBuilder,
+  ColorResolvable,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from "discord.js";
+import { getConfig } from "@pinguin/config";
 
 const COLORS = {
   success: 0x22c55e as ColorResolvable,
@@ -23,44 +27,46 @@ const COLORS = {
   form: 0x6bcb77 as ColorResolvable,
 };
 
-export function createEmbed(type: keyof typeof COLORS = 'default') {
-  return new EmbedBuilder()
-    .setColor(COLORS[type])
-    .setTimestamp();
+export function createEmbed(type: keyof typeof COLORS = "default") {
+  return new EmbedBuilder().setColor(COLORS[type]).setTimestamp();
 }
 
 export function successEmbed(title: string, description?: string) {
-  return createEmbed('success')
+  return createEmbed("success")
     .setTitle(title)
     .setDescription(description ?? null);
 }
 
 export function errorEmbed(title: string, description?: string) {
-  return createEmbed('error')
+  return createEmbed("error")
     .setTitle(title)
     .setDescription(description ?? null);
 }
 
 export function warningEmbed(title: string, description?: string) {
-  return createEmbed('warning')
+  return createEmbed("warning")
     .setTitle(title)
     .setDescription(description ?? null);
 }
 
 export function infoEmbed(title: string, description?: string) {
-  return createEmbed('info')
+  return createEmbed("info")
     .setTitle(title)
     .setDescription(description ?? null);
 }
 
-export function enrichedErrorEmbed(title: string, description: string, expected?: string) {
-  const embed = createEmbed('error')
-    .setTitle('❌ ' + title)
+export function enrichedErrorEmbed(
+  title: string,
+  description: string,
+  expected?: string,
+) {
+  const embed = createEmbed("error")
+    .setTitle("❌ " + title)
     .setDescription(description);
 
   if (expected) {
     embed.addFields({
-      name: 'Attendu',
+      name: "Attendu",
       value: expected,
       inline: false,
     });
@@ -71,13 +77,18 @@ export function enrichedErrorEmbed(title: string, description: string, expected?
   return embed;
 }
 
-export function enrichedErrorEmbedWithButton(title: string, description: string, expected?: string, docsUrl?: string) {
+export function enrichedErrorEmbedWithButton(
+  title: string,
+  description: string,
+  expected?: string,
+  docsUrl?: string,
+) {
   const embed = enrichedErrorEmbed(title, description, expected);
 
   const button = new ButtonBuilder()
-    .setLabel('📖 Aide')
+    .setLabel("📖 Aide")
     .setStyle(ButtonStyle.Link)
-    .setURL(docsUrl || `${config.NEXT_PUBLIC_SITE_URL}/docs`);
+    .setURL(docsUrl || `${getConfig().NEXT_PUBLIC_SITE_URL}/docs`);
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 

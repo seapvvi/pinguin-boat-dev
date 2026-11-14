@@ -1,14 +1,12 @@
-import { FastifyReply, FastifyRequest } from 'fastify';
-import { prisma } from '@pinguin/db';
-import { getConfig } from '@pinguin/config';
-
-const config = getConfig();
+import { FastifyReply, FastifyRequest } from "fastify";
+import { prisma } from "@pinguin/db";
+import { getConfig } from "@pinguin/config";
 
 async function logOwnerAction(
   request: FastifyRequest,
   action: string,
   success: boolean,
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
 ): Promise<void> {
   try {
     await prisma.ownerLog.create({
@@ -17,33 +15,33 @@ async function logOwnerAction(
         action,
         details: details ? JSON.stringify(details) : null,
         ip: request.ip,
-        userAgent: request.headers['user-agent'] || '',
+        userAgent: request.headers["user-agent"] || "",
         success,
       },
     });
-  } catch { }
+  } catch {}
 }
 
 export async function requireOwnerDiscordId(
   request: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   if (!request.user) {
     reply.status(401).send({
       success: false,
-      error: 'Authentification requise',
+      error: "Authentification requise",
     });
     return;
   }
 
-  if (request.user.discordId !== config.DISCORD_OWNER_ID) {
-    await logOwnerAction(request, 'UNAUTHORIZED_ACCESS', false, {
+  if (request.user.discordId !== getConfig().DISCORD_OWNER_ID) {
+    await logOwnerAction(request, "UNAUTHORIZED_ACCESS", false, {
       path: request.url,
       method: request.method,
     });
     reply.status(403).send({
       success: false,
-      error: 'Accès réservé au propriétaire',
+      error: "Accès réservé au propriétaire",
     });
     return;
   }
@@ -51,7 +49,7 @@ export async function requireOwnerDiscordId(
 
 export async function requireOwner(
   request: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   await requireOwnerDiscordId(request, reply);
   if (reply.sent) return;
@@ -63,7 +61,7 @@ export async function requireOwner(
   if (!session) {
     reply.status(401).send({
       success: false,
-      error: 'Session introuvable',
+      error: "Session introuvable",
     });
     return;
   }
@@ -71,7 +69,7 @@ export async function requireOwner(
   if (!session.ownerVerifiedAt) {
     reply.status(401).send({
       success: false,
-      error: 'Veuillez d\'abord vérifier le mot de passe propriétaire',
+      error: "Veuillez d'abord vérifier le mot de passe propriétaire",
       data: { requiresPassword: true },
     });
     return;
@@ -84,13 +82,13 @@ export async function requireOwner(
   if (twoFA?.enabled && !session.owner2faVerifiedAt) {
     reply.status(401).send({
       success: false,
-      error: 'Authentification à deux facteurs requise',
+      error: "Authentification à deux facteurs requise",
       data: { requires2FA: true },
     });
     return;
   }
 
-  await logOwnerAction(request, 'ACCESS_GRANTED', true, {
+  await logOwnerAction(request, "ACCESS_GRANTED", true, {
     path: request.url,
     method: request.method,
   });
