@@ -1,23 +1,27 @@
-﻿'use client';
+﻿"use client";
 
-import { useEffect, useState, type ReactNode } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import Sidebar from './Sidebar';
-import Header from './Header';
-import OwnerPopupListener from './OwnerPopupListener';
-import CommandPalette from './CommandPalette';
-import { Plate, PLATE_LABEL } from './Plate';
-import { getUser, logout as authLogout, type User } from '@/lib/auth';
-import { usePreview } from '@/lib/preview';
+import { useEffect, useState, type ReactNode } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import Sidebar from "./Sidebar";
+import Header from "./Header";
+import OwnerPopupListener from "./OwnerPopupListener";
+import CommandPalette from "./CommandPalette";
+import { Plate, PLATE_LABEL } from "./Plate";
+import { SUPPORTER_STORAGE_KEY } from "@pinguin/shared/themes";
+import { getUser, logout as authLogout, type User } from "@/lib/auth";
+import { usePreview } from "@/lib/preview";
 
 interface DashboardLayoutProps {
   children: ReactNode;
   guildId?: string;
 }
 
-const MARKS = ['企', '港', '記', '組', '版', '印'];
+const MARKS = ["企", "港", "記", "組", "版", "印"];
 
-export default function DashboardLayout({ children, guildId }: DashboardLayoutProps) {
+export default function DashboardLayout({
+  children,
+  guildId,
+}: DashboardLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
@@ -27,7 +31,8 @@ export default function DashboardLayout({ children, guildId }: DashboardLayoutPr
   const preview = usePreview();
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 1024) setSidebarOpen(false);
+    if (typeof window !== "undefined" && window.innerWidth < 1024)
+      setSidebarOpen(false);
   }, []);
 
   useEffect(() => {
@@ -36,7 +41,7 @@ export default function DashboardLayout({ children, guildId }: DashboardLayoutPr
       const u = await getUser();
       if (cancelled) return;
       if (!u) {
-        router.replace('/auth/login');
+        router.replace("/auth/login");
         return;
       }
       setUser(u);
@@ -48,27 +53,43 @@ export default function DashboardLayout({ children, guildId }: DashboardLayoutPr
     };
   }, [router]);
 
+  useEffect(() => {
+    if (!user) return;
+    try {
+      localStorage.setItem(
+        SUPPORTER_STORAGE_KEY,
+        user.isDonor || user.isOwner ? "1" : "0",
+      );
+    } catch {
+      /* storage unavailable */
+    }
+  }, [user]);
+
   async function handleLogout() {
     await authLogout();
-    router.replace('/auth/login');
+    router.replace("/auth/login");
   }
 
   if (loading) {
     return (
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '100vh',
-          padding: '1.5rem',
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "100vh",
+          padding: "1.5rem",
         }}
       >
-        <div style={{ textAlign: 'center' }}>
-          <span className="cjk" style={{ fontSize: '2.4rem', opacity: 0.5 }} aria-hidden="true">
+        <div style={{ textAlign: "center" }}>
+          <span
+            className="cjk"
+            style={{ fontSize: "2.4rem", opacity: 0.5 }}
+            aria-hidden="true"
+          >
             印
           </span>
-          <p className="caption" style={{ marginTop: '0.9rem' }}>
+          <p className="caption" style={{ marginTop: "0.9rem" }}>
             loading
           </p>
         </div>
@@ -84,12 +105,13 @@ export default function DashboardLayout({ children, guildId }: DashboardLayoutPr
         user={user}
         isOpen={sidebarOpen}
         onClose={() => {
-          if (typeof window !== 'undefined' && window.innerWidth < 1024) setSidebarOpen(false);
+          if (typeof window !== "undefined" && window.innerWidth < 1024)
+            setSidebarOpen(false);
         }}
         onLogout={handleLogout}
       />
 
-      <div className={sidebarOpen ? 'app__main app__main--open' : 'app__main'}>
+      <div className={sidebarOpen ? "app__main app__main--open" : "app__main"}>
         <Header
           user={user}
           onMenuToggle={() => setSidebarOpen((v) => !v)}
@@ -100,7 +122,8 @@ export default function DashboardLayout({ children, guildId }: DashboardLayoutPr
 
         {preview && (
           <p className="caption app__preview-note" role="status">
-            preview · sample data, no discord session. saving and toggles are disabled.
+            preview · sample data, no discord session. saving and toggles are
+            disabled.
           </p>
         )}
 
@@ -113,20 +136,31 @@ export default function DashboardLayout({ children, guildId }: DashboardLayoutPr
         <footer className="app__footer folio--bar">
           <div className="shell app__footer-inner">
             <span className="caption">
-              © 2026 pinguin boat —{' '}
+              © 2026 pinguin boat —{" "}
               <a
                 className="link-arrow"
                 href="https://e-z.bio/pvi"
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ fontSize: '0.55rem', display: 'inline-flex' }}
+                style={{ fontSize: "0.55rem", display: "inline-flex" }}
               >
                 pvvi
               </a>
             </span>
-            <span className="caption" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.8rem' }}>
+            <span
+              className="caption"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.8rem",
+              }}
+            >
               <span>colophon · fraunces &amp; space mono</span>
-              <span aria-hidden="true" className="cjk" style={{ fontSize: '0.85rem' }}>
+              <span
+                aria-hidden="true"
+                className="cjk"
+                style={{ fontSize: "0.85rem" }}
+              >
                 印
               </span>
             </span>

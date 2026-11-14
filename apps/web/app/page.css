@@ -15,10 +15,12 @@
   z-index: 30;
   background-color: var(--bar);
   background-image:
-    linear-gradient(rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0.28)),
+    linear-gradient(var(--bar-overlay-a), var(--bar-overlay-b)),
     url("/grain.webp");
   background-repeat: auto, repeat;
-  background-size: auto, 200px 200px;
+  background-size:
+    auto,
+    200px 200px;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -132,10 +134,12 @@
     overflow-y: auto;
     background-color: var(--bar);
     background-image:
-      linear-gradient(rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0.28)),
+      linear-gradient(var(--bar-overlay-a), var(--bar-overlay-b)),
       url("/grain.webp");
     background-repeat: auto, repeat;
-    background-size: auto, 200px 200px;
+    background-size:
+      auto,
+      200px 200px;
     border-bottom: 1px solid var(--line-soft);
   }
 
@@ -183,7 +187,7 @@
   letter-spacing: -0.045em;
   max-width: 12ch;
   margin: 0 0 clamp(1.2rem, 3vw, 1.8rem);
-  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 2px 20px var(--display-shadow);
   text-transform: lowercase;
 }
 
@@ -511,26 +515,36 @@
 }
 
 /* the join glow must not sit in the folio's stacking order above the glyph */
-.folio > [aria-hidden='true']:not(.watermark) {
+.folio > [aria-hidden="true"]:not(.watermark) {
   position: absolute;
   z-index: 0;
 }
 
 /* §01 focus — right of the heading note */
 /* §02 state — left, behind the terminal */
-#terminal > .watermark { --mark-x: 30%; }
+#terminal > .watermark {
+  --mark-x: 30%;
+}
 
 /* §03 modules — slightly left of centre */
-#modules > .watermark { --mark-x: 60%; }
+#modules > .watermark {
+  --mark-x: 60%;
+}
 
 /* §04 deploy — right */
-#deploy > .watermark { --mark-x: 82%; }
+#deploy > .watermark {
+  --mark-x: 82%;
+}
 
 /* §05 notes — around the middle */
-#notes > .watermark { --mark-x: 46%; }
+#notes > .watermark {
+  --mark-x: 46%;
+}
 
 /* §06 join — right, next to the plate */
-#join > .watermark { --mark-x: 74%; }
+#join > .watermark {
+  --mark-x: 74%;
+}
 
 @media (max-width: 520px) {
   .folio > .watermark {
@@ -548,10 +562,12 @@
   position: relative;
   background-color: var(--bar);
   background-image:
-    linear-gradient(rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0.28)),
+    linear-gradient(var(--bar-overlay-a), var(--bar-overlay-b)),
     url("/grain.webp");
   background-repeat: auto, repeat;
-  background-size: auto, 200px 200px;
+  background-size:
+    auto,
+    200px 200px;
   border-top: 1px solid var(--line-soft);
   padding-block: 1rem;
 }
@@ -599,7 +615,9 @@
 .js-fade {
   opacity: 0;
   transform: translateY(22px);
-  transition: opacity 0.9s var(--ease-fade), transform 0.9s var(--ease-fade);
+  transition:
+    opacity 0.9s var(--ease-fade),
+    transform 0.9s var(--ease-fade);
   will-change: opacity, transform;
 }
 

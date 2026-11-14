@@ -1,39 +1,85 @@
-'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { THEME_NAME, type ThemeConfig } from '@pinguin/shared';
-import { HALFTONE_THEME } from '@pinguin/shared';
+"use client";
+import { useCallback, useEffect, useState } from "react";
+import {
+  DEFAULT_THEME_ID,
+  getTheme,
+  isThemeAllowed,
+  normalizeThemeId,
+  THEME_STORAGE_KEY,
+  type ThemeConfig,
+} from "@pinguin/shared/themes";
+import { applyTheme } from "../utils/theme";
 
 interface ThemeState {
   current: string;
-  setTheme: (name: string) => void;
+  setTheme: (name: string) => boolean;
   isDark: boolean;
   theme: ThemeConfig;
+  ready: boolean;
 }
 
-export function useTheme(): ThemeState {
-  const [, setCurrent] = useState<string>(THEME_NAME);
+interface UseThemeOptions {
+  isSupporter?: boolean;
+}
+
+function readStoredTheme(): string {
+  try {
+    return normalizeThemeId(localStorage.getItem(THEME_STORAGE_KEY));
+  } catch {
+    return DEFAULT_THEME_ID;
+  }
+}
+
+export function useTheme({
+  isSupporter = false,
+}: UseThemeOptions = {}): ThemeState {
+  const [current, setCurrent] = useState(DEFAULT_THEME_ID);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    try {
-      localStorage.removeItem('pinguin-theme');
-    } catch {
-      /* storage unavailable */
-    }
-  }, []);
+    const stored = readStoredTheme();
+    setCurrent(isThemeAllowed(stored, isSupporter) ? stored : DEFAULT_THEME_ID);
+    setReady(true);
+  }, [isSupporter]);
 
-  const setTheme = useCallback((name: string) => {
-    setCurrent(name);
+  useEffect(() => {
+    if (!ready) return;
+    const theme = getTheme(current);
+    applyTheme(theme);
     try {
-      localStorage.setItem('pinguin-theme', name);
+      localStorage.setItem(THEME_STORAGE_KEY, theme.id);
     } catch {
-      /* storage unavailable */
+      /* private mode / storage full */
     }
-  }, []);
+  }, [current, ready]);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== THEME_STORAGE_KEY) return;
+      const next = normalizeThemeId(event.newValue);
+      if (isThemeAllowed(next, isSupporter)) setCurrent(next);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [isSupporter]);
+
+  const setTheme = useCallback(
+    (name: string): boolean => {
+      const next = normalizeThemeId(name);
+      if (!isThemeAllowed(next, isSupporter)) return false;
+      setCurrent(next);
+      return true;
+    },
+    [isSupporter],
+  );
+
+  const theme = getTheme(current);
 
   return {
-    current: THEME_NAME,
+    current: theme.id,
     setTheme,
-    isDark: true,
-    theme: HALFTONE_THEME,
+    isDark: theme.isDark,
+    theme,
+    ready,
   };
 }

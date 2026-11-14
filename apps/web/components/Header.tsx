@@ -1,10 +1,11 @@
-﻿'use client';
+﻿"use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Avatar } from '@pinguin/ui';
-import ServerSelector from './ServerSelector';
-import { getAvatarUrl } from '@/lib/utils';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Avatar } from "@pinguin/ui";
+import ServerSelector from "./ServerSelector";
+import ThemeSelector from "./ThemeSelector";
+import { getAvatarUrl } from "@/lib/utils";
 
 interface HeaderProps {
   user: {
@@ -21,24 +22,37 @@ interface HeaderProps {
 }
 
 const CRUMB_LABEL: Record<string, string> = {
-  servers: 'servers',
-  dashboard: 'dashboard',
-  owner: 'owner',
-  docs: 'docs',
-  soutien: 'support',
-  stats: 'stats',
+  servers: "servers",
+  dashboard: "dashboard",
+  owner: "owner",
+  docs: "docs",
+  soutien: "support",
+  stats: "stats",
 };
 
-export default function Header({ user, onMenuToggle, onLogout, guildId, onSearch }: HeaderProps) {
+export default function Header({
+  user,
+  onMenuToggle,
+  onLogout,
+  guildId,
+  onSearch,
+}: HeaderProps) {
   const pathname = usePathname();
-  const segments = pathname.split('/').filter(Boolean);
-  const section = segments[0] ?? 'dashboard';
+  const segments = pathname.split("/").filter(Boolean);
+  const section = segments[0] ?? "dashboard";
   const page = segments[1];
 
   return (
     <header className="app__bar">
       <div className="shell app__bar-inner">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.9rem",
+            minWidth: 0,
+          }}
+        >
           <button
             type="button"
             onClick={onMenuToggle}
@@ -46,7 +60,10 @@ export default function Header({ user, onMenuToggle, onLogout, guildId, onSearch
             aria-label="toggle menu"
             title="menu"
           >
-            <span aria-hidden="true" style={{ fontSize: '0.95rem', lineHeight: 1 }}>
+            <span
+              aria-hidden="true"
+              style={{ fontSize: "0.95rem", lineHeight: 1 }}
+            >
               ≡
             </span>
           </button>
@@ -58,7 +75,9 @@ export default function Header({ user, onMenuToggle, onLogout, guildId, onSearch
             <span aria-hidden="true" className="crumbs__sep">
               /
             </span>
-            <span className="crumbs__current">{CRUMB_LABEL[section] ?? section}</span>
+            <span className="crumbs__current">
+              {CRUMB_LABEL[section] ?? section}
+            </span>
             {page && (
               <>
                 <span aria-hidden="true" className="crumbs__sep">
@@ -70,7 +89,11 @@ export default function Header({ user, onMenuToggle, onLogout, guildId, onSearch
           </nav>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.8rem" }}>
+          <ThemeSelector
+            isSupporter={Boolean(user?.isDonor || user?.isOwner)}
+          />
+
           {onSearch && (
             <button
               type="button"
@@ -81,7 +104,10 @@ export default function Header({ user, onMenuToggle, onLogout, guildId, onSearch
               title="⌘K"
             >
               <span aria-hidden="true">⌕</span>
-              <span className="btn--hide-sm" style={{ color: 'var(--ink-dim)', fontSize: '0.68rem' }}>
+              <span
+                className="btn--hide-sm"
+                style={{ color: "var(--ink-dim)", fontSize: "0.68rem" }}
+              >
                 ⌘K
               </span>
             </button>
@@ -90,9 +116,19 @@ export default function Header({ user, onMenuToggle, onLogout, guildId, onSearch
           {guildId && <ServerSelector guildId={guildId} />}
 
           {user && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Avatar src={getAvatarUrl(user) ?? undefined} name={user.username} size={24} />
-              <span className="label" style={{ color: 'var(--ink)' }}>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.5rem",
+              }}
+            >
+              <Avatar
+                src={getAvatarUrl(user) ?? undefined}
+                name={user.username}
+                size={24}
+              />
+              <span className="label" style={{ color: "var(--ink)" }}>
                 {user.username}
               </span>
             </span>
@@ -102,8 +138,14 @@ export default function Header({ user, onMenuToggle, onLogout, guildId, onSearch
             support
           </Link>
 
-          <button type="button" onClick={onLogout} className="btn btn--icon" aria-label="sign out" title="sign out">
-            <span aria-hidden="true" style={{ fontSize: '0.8rem' }}>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="btn btn--icon"
+            aria-label="sign out"
+            title="sign out"
+          >
+            <span aria-hidden="true" style={{ fontSize: "0.8rem" }}>
               ⏻
             </span>
           </button>
