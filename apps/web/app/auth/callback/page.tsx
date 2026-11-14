@@ -1,11 +1,11 @@
-﻿'use client';
+﻿"use client";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { getUser } from '@/lib/auth';
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { getUser, handleCallback } from "@/lib/auth";
 
 function CallbackInner() {
   const router = useRouter();
@@ -15,17 +15,24 @@ function CallbackInner() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const next = params.get('next') ?? '/servers';
+      const next = params.get("next") ?? "/servers";
+      // Discord redirects here with ?code=...&state=...; the code must be
+      // exchanged for a session before we can know who the user is.
+      const code = params.get("code");
+      const state = params.get("state");
       try {
+        if (code && state) {
+          await handleCallback(code, state);
+        }
         const user = await getUser();
         if (cancelled) return;
         if (user) {
           router.replace(next);
           return;
         }
-        setError('the session was not created. try signing in again.');
+        setError("the session was not created. try signing in again.");
       } catch {
-        if (!cancelled) setError('the callback did not complete. try again.');
+        if (!cancelled) setError("the callback did not complete. try again.");
       }
     })();
     return () => {
@@ -36,15 +43,15 @@ function CallbackInner() {
   return (
     <>
       <span className="label">00 · callback</span>
-      <h1 className="page-title" style={{ marginTop: '0.6rem' }}>
-        {error ? 'sign in failed' : 'signing in'}
+      <h1 className="page-title" style={{ marginTop: "0.6rem" }}>
+        {error ? "sign in failed" : "signing in"}
       </h1>
-      <p className="note" style={{ marginTop: '0.8rem' }}>
-        {error ?? 'one moment, reading your discord session.'}
+      <p className="note" style={{ marginTop: "0.8rem" }}>
+        {error ?? "one moment, reading your discord session."}
       </p>
 
       {error && (
-        <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1.4rem' }}>
+        <div style={{ display: "flex", gap: "0.6rem", marginTop: "1.4rem" }}>
           <Link href="/auth/login" className="btn">
             try again
           </Link>
@@ -62,24 +69,31 @@ export default function AuthCallbackPage() {
     <main
       id="main"
       style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 'var(--gutter)',
-        position: 'relative',
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "var(--gutter)",
+        position: "relative",
       }}
     >
-      <span className="watermark" style={{ left: '58%', top: '44%', transform: 'translate(-50%, -50%)' }} aria-hidden="true">
+      <span
+        className="watermark"
+        style={{ left: "58%", top: "44%", transform: "translate(-50%, -50%)" }}
+        aria-hidden="true"
+      >
         戻
       </span>
 
-      <div className="shell" style={{ maxWidth: '32rem', position: 'relative', zIndex: 1 }}>
+      <div
+        className="shell"
+        style={{ maxWidth: "32rem", position: "relative", zIndex: 1 }}
+      >
         <Suspense
           fallback={
             <>
               <span className="label">00 · callback</span>
-              <h1 className="page-title" style={{ marginTop: '0.6rem' }}>
+              <h1 className="page-title" style={{ marginTop: "0.6rem" }}>
                 signing in
               </h1>
             </>
