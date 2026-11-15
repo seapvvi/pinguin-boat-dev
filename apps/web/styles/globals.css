@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Tailwind only auto-detects sources under apps/web. The shared UI package
+   (packages/ui) holds real components built with utilities (Card padding,
+   Button sizing, …), so it has to be registered explicitly — otherwise those
+   classes are dropped and the components render without padding. */
+@source "../../../packages/ui/src";
+
 @theme {
   --color-paper: var(--paper);
   --color-ink: var(--ink);
