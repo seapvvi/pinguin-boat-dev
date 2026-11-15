@@ -1,6 +1,6 @@
-'use client';
-import React, { useRef, useEffect } from 'react';
-import { useMediaQuery } from '../hooks/useMediaQuery';
+"use client";
+import React, { useRef, useEffect } from "react";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 
 interface Dot {
   x: number;
@@ -25,13 +25,13 @@ export function Snowflakes({ enabled = false, count = 22 }: DriftingDotsProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dotsRef = useRef<Dot[]>([]);
   const rafRef = useRef<number>(0);
-  const prefersReduced = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const prefersReduced = useMediaQuery("(prefers-reduced-motion: reduce)");
 
   useEffect(() => {
     if (!enabled || prefersReduced) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const resize = () => {
@@ -39,7 +39,7 @@ export function Snowflakes({ enabled = false, count = 22 }: DriftingDotsProps) {
       canvas.height = window.innerHeight;
     };
     resize();
-    window.addEventListener('resize', resize);
+    window.addEventListener("resize", resize);
 
     dotsRef.current = Array.from({ length: count }, () => ({
       x: Math.random() * canvas.width,
@@ -62,7 +62,7 @@ export function Snowflakes({ enabled = false, count = 22 }: DriftingDotsProps) {
         }
         ctx.beginPath();
         ctx.arc(dot.x, dot.y, dot.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(212, 197, 181, ${dot.opacity})`;
+        ctx.fillStyle = `rgba(222, 209, 191, ${dot.opacity})`;
         ctx.fill();
       }
       rafRef.current = requestAnimationFrame(animate);
@@ -70,7 +70,7 @@ export function Snowflakes({ enabled = false, count = 22 }: DriftingDotsProps) {
     rafRef.current = requestAnimationFrame(animate);
 
     return () => {
-      window.removeEventListener('resize', resize);
+      window.removeEventListener("resize", resize);
       cancelAnimationFrame(rafRef.current);
     };
   }, [enabled, prefersReduced, count]);
@@ -81,14 +81,17 @@ export function Snowflakes({ enabled = false, count = 22 }: DriftingDotsProps) {
     <div
       aria-hidden="true"
       style={{
-        position: 'fixed',
+        position: "fixed",
         inset: 0,
         zIndex: 5,
-        pointerEvents: 'none',
-        overflow: 'hidden',
+        pointerEvents: "none",
+        overflow: "hidden",
       }}
     >
-      <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+      <canvas
+        ref={canvasRef}
+        style={{ width: "100%", height: "100%", display: "block" }}
+      />
     </div>
   );
 }

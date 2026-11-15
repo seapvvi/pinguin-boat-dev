@@ -425,7 +425,10 @@ export default function LandingClient() {
           </span>
           <div className="shell">
             <header className="sec-head js-fade">
-              <span className="sec-head__label">02 · state</span>
+              <span className="sec-head__label">
+                <span className="sec-head__folio">02</span>
+                <span className="sec-head__flag">state</span>
+              </span>
               <h2 className="section-title">
                 the bot reports what it is doing
               </h2>
@@ -517,7 +520,10 @@ export default function LandingClient() {
           </span>
           <div className="shell">
             <header className="sec-head js-fade">
-              <span className="sec-head__label">06 · join</span>
+              <span className="sec-head__label">
+                <span className="sec-head__folio">06</span>
+                <span className="sec-head__flag">join</span>
+              </span>
               <h2 className="section-title">one server to start with</h2>
               <p className="sec-head__note">
                 no trial, no card, no onboarding funnel. connect, choose a

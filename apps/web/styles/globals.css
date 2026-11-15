@@ -17,28 +17,30 @@
 
 @layer base {
   :root {
-    /* ── palette (halftone editorial) ── */
+    /* ── palette (halftone editorial) ──
+       one warm ink on near-black, plus a single spot colour (ember) used for
+       structure and interaction only, never for body text or fills. */
     --paper: #1b1b19;
-    --ink: #d4c5b5;
-    --ink-dim: #9f8f7f;
-    --ink-bright: #ffffff;
-    --accent-primary: #cdc4ba;
-    --accent-secondary: #8b7355;
-    --accent-hover: #bfa98a;
+    --ink: #ded1bf;
+    --ink-dim: #b0a08c;
+    --ink-bright: #fffaf2;
+    --accent-primary: #e08a4c;
+    --accent-secondary: #a8613a;
+    --accent-hover: #eda471;
 
-    --line: rgba(212, 197, 181, 0.16);
-    --line-soft: rgba(212, 197, 181, 0.09);
+    --line: rgba(222, 209, 191, 0.2);
+    --line-soft: rgba(222, 209, 191, 0.115);
     --plate-ground: #030303;
     --plate-frame: #0e0e0d;
     --bar: #0d0d0a;
 
     --body-overlay: rgba(0, 0, 0, 0.22);
-    --rule-tint: rgba(212, 197, 181, 0.026);
+    --rule-tint: rgba(222, 209, 191, 0.03);
     --bar-overlay-a: rgba(0, 0, 0, 0.38);
     --bar-overlay-b: rgba(0, 0, 0, 0.28);
-    --hover-tint: rgba(212, 197, 181, 0.04);
-    --hover-tint-strong: rgba(212, 197, 181, 0.05);
-    --sheen: rgba(212, 197, 181, 0.05);
+    --hover-tint: rgba(222, 209, 191, 0.045);
+    --hover-tint-strong: rgba(222, 209, 191, 0.06);
+    --sheen: rgba(222, 209, 191, 0.06);
     --shadow-color: rgba(0, 0, 0, 0.45);
     --shadow-color-strong: rgba(0, 0, 0, 0.55);
     --modal-backdrop: rgba(6, 6, 5, 0.82);
@@ -54,13 +56,13 @@
     --bg-sidebar-active: #161613;
     --bg-header: var(--bar);
     --border-color: var(--line);
-    --border-color-strong: rgba(212, 197, 181, 0.42);
-    --bg-surface-alt-hover: rgba(212, 197, 181, 0.06);
+    --border-color-strong: rgba(222, 209, 191, 0.46);
+    --bg-surface-alt-hover: rgba(222, 209, 191, 0.06);
     --text-primary: var(--ink);
     --text-secondary: var(--ink-dim);
     --accent: var(--ink);
-    --accent-hover: #bfa98a;
-    --accent-primary-hover: #bfa98a;
+    --accent-hover: #eda471;
+    --accent-primary-hover: #eda471;
     --success: #a8b39a;
     --warning: var(--accent-hover);
     --error: #d8b2a2;
@@ -160,12 +162,12 @@
     --ink: #26231e;
     --ink-dim: #6f675c;
     --ink-bright: #000000;
-    --accent-primary: #3b352c;
-    --accent-secondary: #8b7355;
-    --accent-hover: #000000;
-    --accent-primary-hover: #000000;
-    --line: rgba(36, 33, 28, 0.18);
-    --line-soft: rgba(36, 33, 28, 0.1);
+    --accent-primary: #a04f1e;
+    --accent-secondary: #8f4519;
+    --accent-hover: #8f4519;
+    --accent-primary-hover: #8f4519;
+    --line: rgba(36, 33, 28, 0.2);
+    --line-soft: rgba(36, 33, 28, 0.115);
     --plate-ground: #e7e0d2;
     --plate-frame: #fbf8f1;
     --bar: #ece6da;

@@ -48,7 +48,10 @@ export default function LandingPage() {
         </span>
         <div className="shell">
           <header className="sec-head js-fade">
-            <span className="sec-head__label">03 · index — modules</span>
+            <span className="sec-head__label">
+              <span className="sec-head__folio">03</span>
+              <span className="sec-head__flag">index — modules</span>
+            </span>
             <h2 className="section-title">
               nineteen modules, each one switchable
             </h2>
@@ -105,7 +108,10 @@ export default function LandingPage() {
         </span>
         <div className="shell">
           <header className="sec-head js-fade">
-            <span className="sec-head__label">04 · method — deploy</span>
+            <span className="sec-head__label">
+              <span className="sec-head__folio">04</span>
+              <span className="sec-head__flag">method — deploy</span>
+            </span>
             <h2 className="section-title">add it, pick a server, done</h2>
             <p className="sec-head__note">
               the bot reads its own configuration from the api. the dashboard
@@ -223,7 +229,10 @@ export default function LandingPage() {
         </span>
         <div className="shell">
           <header className="sec-head js-fade">
-            <span className="sec-head__label">05 · marginalia — notes</span>
+            <span className="sec-head__label">
+              <span className="sec-head__folio">05</span>
+              <span className="sec-head__flag">marginalia — notes</span>
+            </span>
             <h2 className="section-title">questions that come up</h2>
             <p className="sec-head__note">
               short answers. if something is missing, ask in the discord.
