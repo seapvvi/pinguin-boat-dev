@@ -6,6 +6,32 @@
 .landing {
   position: relative;
   overflow-x: clip;
+
+  /* landing-scoped rule scale: one warm ink, three weights. the dashboard keeps
+     the two global tones, these follow every theme through color-mix. */
+  --line: color-mix(in srgb, var(--ink) 24%, transparent);
+  --line-soft: color-mix(in srgb, var(--ink) 13%, transparent);
+  --line-faint: color-mix(in srgb, var(--ink) 7%, transparent);
+
+  /* accent for text: the raw secondary tone sits at ~3.9:1 on paper, under the
+     4.5:1 floor for small type. pulling it toward the theme ink keeps the warm
+     hue and lands at 5.2:1 (classic) / 5.5:1 (light). */
+  --accent-ink: color-mix(in srgb, var(--accent-secondary) 72%, var(--ink));
+}
+
+/* the landing has its own accent moments: warm, interactive only */
+.landing ::selection {
+  background: var(--accent-ink);
+  color: var(--paper);
+}
+
+.landing :focus-visible {
+  outline-color: var(--accent-secondary);
+}
+
+.landing .link-arrow:hover,
+.landing .faq__row summary:hover {
+  color: var(--accent-ink);
 }
 
 /* â”€â”€ header / nav â”€â”€ */
@@ -101,12 +127,27 @@
 
 .nav__link:hover,
 .nav__link[aria-current="page"] {
-  color: var(--accent-hover);
+  color: var(--ink);
 }
 
 .nav__link:hover::after,
 .nav__link[aria-current="page"]::after {
   transform: scaleX(1);
+  background: var(--accent-secondary);
+}
+
+.landing__bar .btn:hover:not(:disabled) {
+  background: var(--accent-ink);
+  border-color: var(--accent-ink);
+  color: var(--paper);
+  box-shadow: none;
+}
+
+/* the nav CTA is the one action that must survive on a phone: it keeps a
+   readable target and a stronger hairline than the secondary buttons */
+.landing__cta {
+  min-height: 2.1rem;
+  border-color: color-mix(in srgb, var(--ink) 42%, transparent);
 }
 
 .nav__menu-btn {
@@ -209,34 +250,108 @@
 }
 
 .hero__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1.6rem;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
   margin-top: 0.8rem;
   padding-top: 0.9rem;
-  border-top: 1px solid var(--line-soft);
+  border-top: 1px solid var(--line);
 }
 
 .hero__meta-item {
   display: flex;
-  align-items: baseline;
-  gap: 0.45rem;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding-inline: 0.8rem;
+  border-left: 1px solid var(--line-soft);
+}
+
+.hero__meta-item:first-child {
+  padding-left: 0;
+  border-left: 0;
 }
 
 .hero__meta-key {
   font-family: var(--f-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.03em;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
   color: var(--ink-dim);
   text-transform: lowercase;
 }
 
 .hero__meta-value {
   font-family: var(--f-mono);
-  font-size: 0.9rem;
+  font-size: 1.05rem;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
   color: var(--ink);
+}
+
+.hero__meta-value--pending {
+  display: inline-flex;
+  align-items: center;
+  height: 1.05rem;
+}
+
+.hero__meta-value--pending .skeleton {
+  width: 100%;
+  height: 0.72rem;
+  border: 0;
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+}
+
+.hero__meta-value--live {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.hero__status-dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: none;
+  background: var(--success);
+  animation: status-pulse 2.8s var(--ease-fade) infinite;
+}
+
+/* pending and down are still states, not movement */
+.hero__status-dot--pending {
+  background: var(--ink-dim);
+  animation: none;
+}
+
+.hero__status-dot--down {
+  background: var(--error);
+  animation: none;
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero__status-dot {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero__meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 0.6rem;
+  }
+
+  .hero__meta-item {
+    padding-left: 0;
+    border-left: 0;
+  }
 }
 
 .hero__figure {
@@ -321,6 +436,25 @@
   border-bottom: 1px solid var(--line-soft);
   overflow: hidden;
   padding-block: 0.7rem;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 6%,
+    #000 94%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 6%,
+    #000 94%,
+    transparent
+  );
+}
+
+.marquee + .marquee {
+  border-top: 0;
+  padding-block: 0.5rem;
 }
 
 .marquee__track {
@@ -329,6 +463,15 @@
   gap: 2.6rem;
   width: max-content;
   animation: marquee-slide 46s linear infinite;
+}
+
+.marquee--reverse .marquee__track {
+  animation-direction: reverse;
+  animation-duration: 64s;
+}
+
+.marquee--reverse .marquee__item {
+  color: color-mix(in srgb, var(--ink-dim) 82%, transparent);
 }
 
 .marquee:hover .marquee__track {
@@ -481,7 +624,60 @@
 
 /* â”€â”€ section head (landing variant) â”€â”€ */
 .landing .sec-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 27rem);
+  column-gap: 1.6rem;
+  row-gap: 0.5rem;
+  align-items: baseline;
   margin-bottom: clamp(1.2rem, 3vw, 2.2rem);
+}
+
+/* newspaper kicker: marker square, folio reference, then a hairline that runs
+   to the right edge of the shell. title and note sit under it. */
+.landing .sec-head__label {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  color: var(--accent-ink);
+}
+
+.landing .sec-head__label::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  flex: none;
+  background: var(--accent-ink);
+}
+
+.landing .sec-head__label::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+}
+
+.landing .sec-head .section-title {
+  grid-column: 1;
+}
+
+.landing .sec-head__note {
+  grid-column: 2;
+  margin-left: 0;
+  max-width: none;
+}
+
+@media (max-width: 860px) {
+  .landing .sec-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .landing .sec-head .section-title,
+  .landing .sec-head__note {
+    grid-column: 1;
+  }
 }
 
 /* â”€â”€ faq / details list spacing on landing â”€â”€ */
@@ -597,7 +793,7 @@
 }
 
 .footer__link:hover {
-  color: var(--accent-hover);
+  color: var(--accent-ink);
 }
 
 .footer__base {
@@ -626,11 +822,46 @@
   transform: none;
 }
 
+/* the block reveals as one, then its children follow in index order. --i is
+   capped at 8 in the markup so a 19-row ledger does not crawl in. */
+.js-fade.is-in .rows__row,
+.js-fade.is-in .folio-card {
+  animation: row-in 0.62s var(--ease-fade) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* section heads resolve from a soft blur: cheap emphasis on the big serif */
+.landing .sec-head.js-fade {
+  filter: blur(2px);
+  transition:
+    opacity 0.9s var(--ease-fade),
+    transform 0.9s var(--ease-fade),
+    filter 0.7s var(--ease-fade);
+}
+
+.landing .sec-head.js-fade.is-in {
+  filter: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .js-fade {
     opacity: 1;
     transform: none;
     transition: none;
+  }
+
+  .js-fade.is-in .rows__row,
+  .js-fade.is-in .folio-card,
+  .landing .sec-head.js-fade {
+    animation: none;
+    filter: none;
   }
 }
 
@@ -641,4 +872,30 @@
   height: 1px;
   z-index: 60;
   background: var(--ink-dim);
+}
+
+/* ── folio rail ──
+   one hairline at the left edge of the centered shell, so the text measure
+   reads as a column. wide screens only: on narrow ones the shell is flush with
+   the viewport and the rule would sit on the screen edge. */
+@media (min-width: 1100px) {
+  .landing .folio > .shell {
+    border-left: 1px solid var(--line-soft);
+  }
+}
+
+/* ── folio card glyph ──
+   outline by default, faint fill on hover so the card answers the cursor */
+.folio-card__glyph {
+  transition: color 420ms var(--ease-fade);
+}
+
+.folio-card:hover .folio-card__glyph {
+  color: color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+/* ── live tag ── */
+.landing .tag--live {
+  border-color: color-mix(in srgb, var(--accent-ink) 55%, transparent);
+  color: var(--accent-ink);
 }

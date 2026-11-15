@@ -1,48 +1,63 @@
-﻿'use client';
+﻿"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { MODULES } from '@/lib/landing-data';
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
+import { MODULES } from "@/lib/landing-data";
 
-export { MODULES, FEATURES } from '@/lib/landing-data';
+export { MODULES, FEATURES } from "@/lib/landing-data";
 
 const CHANGED = [
-  { v: '0.1', t: 'levels and xp rewards', d: '11 november 2026' },
-  { v: '0.0', t: 'dashboard rewrite: modules, kpis, audit rows', d: '15 may 2026' },
-  { v: '0.0', t: 'giveaways and tickets', d: '28 april 2026' },
+  { v: "0.1", t: "levels and xp rewards", d: "11 november 2026" },
+  {
+    v: "0.0",
+    t: "dashboard rewrite: modules, kpis, audit rows",
+    d: "15 may 2026",
+  },
+  { v: "0.0", t: "giveaways and tickets", d: "28 april 2026" },
 ];
 
 interface Stats {
   guilds: number;
   users: number;
   commands: number;
-  uptime: string;
 }
 
-const TERMINAL_LINES: { text: string; kind?: 'cmd' | 'ok' | 'head' }[] = [
-  { text: 'pinguin@boat:~$ ./bot status', kind: 'cmd' },
-  { text: '  modules loaded        18/18', kind: 'ok' },
-  { text: '  commands synced       214', kind: 'ok' },
-  { text: '  database              connected', kind: 'ok' },
-  { text: '  shard 0               ready', kind: 'ok' },
-  { text: '' },
-  { text: '  guilds                {guilds}', kind: 'head' },
-  { text: '  members               {members}', kind: 'head' },
-  { text: '  uptime                {uptime}', kind: 'head' },
-  { text: '' },
-  { text: 'pinguin@boat:~$ ▌', kind: 'cmd' },
+/** 'pending' while /api/stats/public is in flight, so the hero never shows
+ *  invented zeros. */
+type StatsState = "pending" | "up" | "down";
+
+const numberFormat = new Intl.NumberFormat("en-US");
+
+const TERMINAL_LINES: { text: string; kind?: "cmd" | "ok" | "head" }[] = [
+  { text: "pinguin@boat:~$ ./bot status", kind: "cmd" },
+  { text: "  modules loaded        {modules}/{modules}", kind: "ok" },
+  { text: "  audit rows            {commands}", kind: "ok" },
+  { text: "  database              connected", kind: "ok" },
+  { text: "  shard 0               ready", kind: "ok" },
+  { text: "" },
+  { text: "  guilds                {guilds}", kind: "head" },
+  { text: "  members               {members}", kind: "head" },
+  { text: "" },
+  { text: "pinguin@boat:~$ ▌", kind: "cmd" },
 ];
 
 export default function LandingClient() {
-  const [user, setUser] = useState<{ id: string; username: string } | null | undefined>(undefined);
-  const [stats, setStats] = useState<Stats>({ guilds: 0, users: 0, commands: 0, uptime: '—' });
+  const [user, setUser] = useState<
+    { id: string; username: string } | null | undefined
+  >(undefined);
+  const [stats, setStats] = useState<Stats>({
+    guilds: 0,
+    users: 0,
+    commands: 0,
+  });
+  const [statsState, setStatsState] = useState<StatsState>("pending");
   const [menuOpen, setMenuOpen] = useState(false);
   const [visible, setVisible] = useState(0);
   const terminalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/auth/me')
+    fetch("/api/auth/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (cancelled) return;
@@ -58,7 +73,7 @@ export default function LandingClient() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/stats/public')
+    fetch("/api/stats/public")
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;
@@ -67,11 +82,12 @@ export default function LandingClient() {
           guilds: Number(data.totalGuilds ?? data.guilds ?? 0),
           users: Number(data.totalUsers ?? data.members ?? 0),
           commands: Number(data.totalCommands ?? 0),
-          uptime: data.uptime ? `${Number(data.uptime).toFixed(2)}%` : '—',
         });
+        setStatsState("up");
       })
       .catch(() => {
-        /* the page must render with honest zeros when the api is down */
+        /* the page must render without inventing numbers when the api is down */
+        setStatsState("down");
       });
     return () => {
       cancelled = true;
@@ -81,7 +97,7 @@ export default function LandingClient() {
   useEffect(() => {
     const el = terminalRef.current;
     if (!el) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setVisible(TERMINAL_LINES.length);
       return;
     }
@@ -108,22 +124,36 @@ export default function LandingClient() {
   }, []);
 
   useEffect(() => {
-    document.body.style.overflow = menuOpen ? 'hidden' : '';
+    document.body.style.overflow = menuOpen ? "hidden" : "";
     return () => {
-      document.body.style.overflow = '';
+      document.body.style.overflow = "";
     };
   }, [menuOpen]);
 
-  const lineText = (text: string) =>
-    text
-      .replace('{guilds}', String(stats.guilds))
-      .replace('{members}', String(stats.users))
-      .replace('{uptime}', stats.uptime);
+  const lineText = (text: string) => {
+    const n = (value: number) =>
+      statsState === "down" ? "—" : numberFormat.format(value);
+    return text
+      .replace("{guilds}", n(stats.guilds))
+      .replace("{members}", n(stats.users))
+      .replace("{commands}", n(stats.commands))
+      .replace("{modules}", String(MODULES.length));
+  };
+
+  const pending = statsState === "pending";
+
+  /** skeleton while loading, an em dash when the api is unreachable: the hero
+   *  must never print a zero it did not read. */
+  const metaValue = (value: number) => {
+    if (pending) return <span className="skeleton" aria-hidden="true" />;
+    if (statsState === "down") return "—";
+    return numberFormat.format(value);
+  };
 
   const navLinks = [
-    { href: '#modules', label: 'modules' },
-    { href: '#deploy', label: 'deploy' },
-    { href: '#notes', label: 'notes' },
+    { href: "#modules", label: "modules" },
+    { href: "#deploy", label: "deploy" },
+    { href: "#notes", label: "notes" },
   ];
 
   return (
@@ -131,14 +161,24 @@ export default function LandingClient() {
       <header className="landing__bar">
         <div className="shell landing__bar-inner">
           <Link href="/" className="brand" aria-label="pinguin boat, home">
-            <span className="brand__mark cjk" aria-hidden="true">企</span>
+            <span className="brand__mark cjk" aria-hidden="true">
+              企
+            </span>
             <span className="brand__name">pinguin boat</span>
             <span className="brand__sub">v0.1</span>
           </Link>
 
-          <nav className={`nav${menuOpen ? ' nav--open' : ''}`} aria-label="sections">
+          <nav
+            className={`nav${menuOpen ? " nav--open" : ""}`}
+            aria-label="sections"
+          >
             {navLinks.map((l) => (
-              <a key={l.href} className="nav__link" href={l.href} onClick={() => setMenuOpen(false)}>
+              <a
+                key={l.href}
+                className="nav__link"
+                href={l.href}
+                onClick={() => setMenuOpen(false)}
+              >
                 {l.label}
               </a>
             ))}
@@ -150,29 +190,29 @@ export default function LandingClient() {
             >
               discord
             </a>
-            <a className="nav__link" href="/dashboard">
-              dashboard
-            </a>
           </nav>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.7rem" }}>
             <button
               type="button"
               className="btn btn--icon nav__menu-btn"
               aria-expanded={menuOpen}
-              aria-label={menuOpen ? 'close menu' : 'open menu'}
+              aria-label={menuOpen ? "close menu" : "open menu"}
               onClick={() => setMenuOpen((v) => !v)}
             >
-              <span aria-hidden="true" style={{ fontSize: '0.9rem', lineHeight: 1 }}>
-                {menuOpen ? '×' : '≡'}
+              <span
+                aria-hidden="true"
+                style={{ fontSize: "0.9rem", lineHeight: 1 }}
+              >
+                {menuOpen ? "×" : "≡"}
               </span>
             </button>
             <Link
-              href={user ? '/dashboard' : '/auth/login'}
-              className="btn btn--hide-sm"
+              href={user ? "/dashboard" : "/auth/login"}
+              className="btn landing__cta"
               prefetch={false}
             >
-              {user ? 'open dashboard' : 'sign in'}
+              {user ? "dashboard" : "sign in"}
             </Link>
           </div>
         </div>
@@ -180,48 +220,92 @@ export default function LandingClient() {
 
       <main id="main">
         <section className="hero">
-          <span className="hero__folio-mark" aria-hidden="true">企</span>
+          <span className="hero__folio-mark" aria-hidden="true">
+            企
+          </span>
           <div className="shell hero__grid">
             <div>
               <div className="hero__eyebrow">
-                <span className="cjk" aria-hidden="true" style={{ fontSize: '1.35rem' }}>企</span>
-                <span className="label">01 · a discord bot, and the dashboard for it</span>
+                <span
+                  className="cjk"
+                  aria-hidden="true"
+                  style={{ fontSize: "1.35rem" }}
+                >
+                  企
+                </span>
+                <span className="label">
+                  01 · a discord bot, and the dashboard for it
+                </span>
               </div>
 
-              <h1 className="hero__title">a bot that keeps its mouth shut until you speak.</h1>
+              <h1 className="hero__title">
+                a bot that keeps its mouth shut until you speak.
+              </h1>
 
               <p className="hero__lead">
-                moderation, automod, tickets, levels, music, giveaways, economy. nineteen modules,
-                each with a switch and a settings panel. configured from the web, not from a command
-                you have to look up.
+                moderation, automod, tickets, levels, music, giveaways, economy.
+                nineteen modules, each with a switch and a settings panel.
+                configured from the web, not from a command you have to look up.
               </p>
 
               <div className="hero__actions">
-                <Link href={user ? '/servers' : '/auth/login'} className="btn btn--solid" prefetch={false}>
-                  {user ? 'open the dashboard' : 'connect discord'}
+                <Link
+                  href={user ? "/servers" : "/auth/login"}
+                  className="btn btn--solid"
+                  prefetch={false}
+                >
+                  {user ? "open the dashboard" : "connect discord"}
                 </Link>
               </div>
 
               <div className="hero__meta">
                 <div className="hero__meta-item">
                   <span className="hero__meta-key">servers</span>
-                  <span className="hero__meta-value">{stats.guilds}</span>
+                  <span
+                    className={`hero__meta-value${pending ? " hero__meta-value--pending" : ""}`}
+                  >
+                    {metaValue(stats.guilds)}
+                  </span>
                 </div>
                 <div className="hero__meta-item">
                   <span className="hero__meta-key">members</span>
-                  <span className="hero__meta-value">{stats.users}</span>
+                  <span
+                    className={`hero__meta-value${pending ? " hero__meta-value--pending" : ""}`}
+                  >
+                    {metaValue(stats.users)}
+                  </span>
                 </div>
                 <div className="hero__meta-item">
-                  <span className="hero__meta-key">commands</span>
-                  <span className="hero__meta-value">{stats.commands}</span>
+                  <span className="hero__meta-key">audit rows</span>
+                  <span
+                    className={`hero__meta-value${pending ? " hero__meta-value--pending" : ""}`}
+                  >
+                    {metaValue(stats.commands)}
+                  </span>
                 </div>
                 <div className="hero__meta-item">
-                  <span className="hero__meta-key">uptime</span>
-                  <span className="hero__meta-value">{stats.uptime}</span>
+                  <span className="hero__meta-key">modules</span>
+                  <span className="hero__meta-value">{MODULES.length}</span>
                 </div>
                 <div className="hero__meta-item">
                   <span className="hero__meta-key">status</span>
-                  <span className="hero__meta-value">alpha</span>
+                  <span className="hero__meta-value hero__meta-value--live">
+                    <span
+                      className={`hero__status-dot${
+                        statsState === "up"
+                          ? ""
+                          : statsState === "down"
+                            ? " hero__status-dot--down"
+                            : " hero__status-dot--pending"
+                      }`}
+                      aria-hidden="true"
+                    />
+                    {statsState === "up"
+                      ? "live"
+                      : statsState === "down"
+                        ? "unknown"
+                        : "checking"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -230,7 +314,14 @@ export default function LandingClient() {
               <div className="hero__plate-row">
                 <figure className="plate" style={{ margin: 0 }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/plates/nebula.svg" alt="halftone plate: a nebula, bright core inside uneven veils of gas" width={780} height={960} fetchPriority="high" decoding="async" />
+                  <img
+                    src="/plates/nebula.svg"
+                    alt="halftone plate: a nebula, bright core inside uneven veils of gas"
+                    width={780}
+                    height={960}
+                    fetchPriority="high"
+                    decoding="async"
+                  />
                   <figcaption>
                     <span>fig. 03 · 雲</span>
                     <span>03/10</span>
@@ -238,7 +329,13 @@ export default function LandingClient() {
                 </figure>
                 <figure className="plate" style={{ margin: 0 }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/plates/eclipse.svg" alt="halftone plate: a total eclipse, dark disc inside a thin corona ring" width={780} height={960} decoding="async" />
+                  <img
+                    src="/plates/eclipse.svg"
+                    alt="halftone plate: a total eclipse, dark disc inside a thin corona ring"
+                    width={780}
+                    height={960}
+                    decoding="async"
+                  />
                   <figcaption>
                     <span>fig. 02 · 蝕</span>
                     <span>02/10</span>
@@ -248,7 +345,14 @@ export default function LandingClient() {
 
               <figure className="plate" style={{ margin: 0 }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/plates/milkyway.svg" alt="halftone plate: the milky way, a bright band of stars split by dark dust lanes" width={1560} height={760} loading="lazy" decoding="async" />
+                <img
+                  src="/plates/milkyway.svg"
+                  alt="halftone plate: the milky way, a bright band of stars split by dark dust lanes"
+                  width={1560}
+                  height={760}
+                  loading="lazy"
+                  decoding="async"
+                />
                 <figcaption>
                   <span>fig. 05 — milky way · 河</span>
                   <span>05/10</span>
@@ -258,17 +362,29 @@ export default function LandingClient() {
               <div className="hero__side">
                 <div className="hero__side-row">
                   <span className="label">set in</span>
-                  <span style={{ fontSize: '0.74rem' }}>fraunces &amp; space mono</span>
+                  <span style={{ fontSize: "0.74rem" }}>
+                    fraunces &amp; space mono
+                  </span>
                 </div>
                 <div className="hero__side-row">
                   <span className="label">contact</span>
-                  <a className="link-arrow" href="https://discord.gg/EJHhcYkXMQ" target="_blank" rel="noopener noreferrer">
+                  <a
+                    className="link-arrow"
+                    href="https://discord.gg/EJHhcYkXMQ"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     discord
                   </a>
                 </div>
                 <div className="hero__side-row">
                   <span className="label">source</span>
-                  <a className="link-arrow" href="https://github.com/seapvvi/pinguin-boat" target="_blank" rel="noopener noreferrer">
+                  <a
+                    className="link-arrow"
+                    href="https://github.com/seapvvi/pinguin-boat"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     repository
                   </a>
                 </div>
@@ -281,7 +397,22 @@ export default function LandingClient() {
           <div className="marquee__track">
             {[...MODULES, ...MODULES].map((m, i) => (
               <span className="marquee__item" key={`${m.name}-${i}`}>
-                <span className="cjk">{['管', '記', '静', '波', '山', '星'][i % 6]}</span>
+                <span className="cjk">
+                  {["管", "記", "静", "波", "山", "星"][i % 6]}
+                </span>
+                {m.name}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="marquee marquee--reverse" aria-hidden="true">
+          <div className="marquee__track">
+            {[...MODULES, ...MODULES].reverse().map((m, i) => (
+              <span className="marquee__item" key={`rev-${m.name}-${i}`}>
+                <span className="cjk">
+                  {["星", "山", "波", "静", "記", "管"][i % 6]}
+                </span>
                 {m.name}
               </span>
             ))}
@@ -295,8 +426,12 @@ export default function LandingClient() {
           <div className="shell">
             <header className="sec-head js-fade">
               <span className="sec-head__label">02 · state</span>
-              <h2 className="section-title">the bot reports what it is doing</h2>
-              <p className="sec-head__note">read straight from the process. no synthetic metrics.</p>
+              <h2 className="section-title">
+                the bot reports what it is doing
+              </h2>
+              <p className="sec-head__note">
+                read straight from the process. no synthetic metrics.
+              </p>
             </header>
 
             <div className="content-grid content-grid--wide js-fade">
@@ -310,22 +445,24 @@ export default function LandingClient() {
                     <div
                       key={i}
                       className={`terminal__line${
-                        line.kind === 'cmd'
-                          ? ' terminal__line--cmd'
-                          : line.kind === 'ok'
-                            ? ' terminal__line--ok'
-                            : line.kind === 'head'
-                              ? ' terminal__line--head'
-                              : ''
+                        line.kind === "cmd"
+                          ? " terminal__line--cmd"
+                          : line.kind === "ok"
+                            ? " terminal__line--ok"
+                            : line.kind === "head"
+                              ? " terminal__line--head"
+                              : ""
                       }`}
                     >
-                      {line.text.endsWith('▌') ? (
+                      {line.text.endsWith("▌") ? (
                         <>
-                          {lineText(line.text.replace('▌', ''))}
-                          <span className="caret" aria-hidden="true">▌</span>
+                          {lineText(line.text.replace("▌", ""))}
+                          <span className="caret" aria-hidden="true">
+                            ▌
+                          </span>
                         </>
                       ) : (
-                        lineText(line.text) || '\u00a0'
+                        lineText(line.text) || "\u00a0"
                       )}
                     </div>
                   ))}
@@ -333,10 +470,17 @@ export default function LandingClient() {
               </div>
             </div>
 
-            <div className="rows js-fade" style={{ marginTop: 'clamp(1.4rem, 3vw, 2.2rem)' }}>
+            <div
+              className="rows js-fade"
+              style={{ marginTop: "clamp(1.4rem, 3vw, 2.2rem)" }}
+            >
               {CHANGED.map((c, i) => (
-                <div className="rows__row" key={`${c.v}-${c.t}`}>
-                  <span className="num">{String(i + 1).padStart(2, '0')}</span>
+                <div
+                  className="rows__row"
+                  key={`${c.v}-${c.t}`}
+                  style={{ "--i": Math.min(i, 8) } as CSSProperties}
+                >
+                  <span className="num">{String(i + 1).padStart(2, "0")}</span>
                   <div>
                     <div className="rows__title">{c.t}</div>
                     <div className="rows__desc">published {c.d}</div>
@@ -353,19 +497,19 @@ export default function LandingClient() {
           id="join"
           style={{
             background:
-              'radial-gradient(120% 90% at 60% 38%, color-mix(in srgb, var(--accent-primary) 3%, transparent), transparent 70%)',
-            overflow: 'hidden',
+              "radial-gradient(120% 90% at 60% 38%, color-mix(in srgb, var(--accent-secondary) 7%, transparent), transparent 70%)",
+            overflow: "hidden",
           }}
         >
           <span
             aria-hidden="true"
             style={{
-              position: 'absolute',
+              position: "absolute",
               inset: 0,
               background:
-                'radial-gradient(40% 40% at 60% 38%, color-mix(in srgb, var(--accent-primary) 8%, transparent), transparent 70%)',
-              filter: 'blur(40px)',
-              pointerEvents: 'none',
+                "radial-gradient(40% 40% at 60% 38%, color-mix(in srgb, var(--accent-secondary) 12%, transparent), transparent 70%)",
+              filter: "blur(40px)",
+              pointerEvents: "none",
             }}
           />
           <span className="watermark" aria-hidden="true">
@@ -376,29 +520,54 @@ export default function LandingClient() {
               <span className="sec-head__label">06 · join</span>
               <h2 className="section-title">one server to start with</h2>
               <p className="sec-head__note">
-                no trial, no card, no onboarding funnel. connect, choose a server, and the modules
-                are there.
+                no trial, no card, no onboarding funnel. connect, choose a
+                server, and the modules are there.
               </p>
             </header>
 
             <div className="content-grid js-fade">
               <div className="content-grid__body">
-                <div className="prose" style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+                <div
+                  className="prose"
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.9rem",
+                  }}
+                >
                   <p>
-                    the bot asks for the permissions it needs at invite time: manage messages,
-                    moderate members, manage roles, and read history. if you decline one, the
-                    module that needs it stays off instead of failing silently.
+                    the bot asks for the permissions it needs at invite time:
+                    manage messages, moderate members, manage roles, and read
+                    history. if you decline one, the module that needs it stays
+                    off instead of failing silently.
                   </p>
                   <p>
-                    support runs through the discord. the dashboard has no support chat, and no
-                    newsletter is collected anywhere on this site.
+                    support runs through the discord. the dashboard has no
+                    support chat, and no newsletter is collected anywhere on
+                    this site.
                   </p>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.7rem', marginTop: '1.4rem' }}>
-                  <Link href={user ? '/servers' : '/auth/login'} className="btn btn--solid" prefetch={false}>
-                    {user ? 'open the dashboard' : 'connect discord'}
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "0.7rem",
+                    marginTop: "1.4rem",
+                  }}
+                >
+                  <Link
+                    href={user ? "/servers" : "/auth/login"}
+                    className="btn btn--solid"
+                    prefetch={false}
+                  >
+                    {user ? "open the dashboard" : "connect discord"}
                   </Link>
-                  <a className="btn" href="https://discord.gg/EJHhcYkXMQ" target="_blank" rel="noopener noreferrer">
+                  <a
+                    className="btn"
+                    href="https://discord.gg/EJHhcYkXMQ"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     join the discord
                   </a>
                 </div>
@@ -406,7 +575,14 @@ export default function LandingClient() {
               <aside className="content-grid__plate">
                 <figure className="plate" style={{ margin: 0 }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/plates/moon.svg" alt="halftone plate: a moon with craters and a few stars behind it" width={780} height={960} loading="lazy" decoding="async" />
+                  <img
+                    src="/plates/moon.svg"
+                    alt="halftone plate: a moon with craters and a few stars behind it"
+                    width={780}
+                    height={960}
+                    loading="lazy"
+                    decoding="async"
+                  />
                   <figcaption>
                     <span>fig. 03</span>
                     <span>moon · 月</span>
@@ -421,9 +597,11 @@ export default function LandingClient() {
       <footer className="footer">
         <div className="shell">
           <div className="footer__inner">
-            <div className="footer__col" style={{ minWidth: '14rem' }}>
+            <div className="footer__col" style={{ minWidth: "14rem" }}>
               <span className="brand__name">pinguin boat</span>
-              <span className="caption">a discord bot and a dashboard. open source, community run.</span>
+              <span className="caption">
+                a discord bot and a dashboard. open source, community run.
+              </span>
             </div>
 
             <div className="footer__col">
@@ -437,13 +615,28 @@ export default function LandingClient() {
 
             <div className="footer__col">
               <span className="label">elsewhere</span>
-              <a className="footer__link" href="https://discord.gg/EJHhcYkXMQ" target="_blank" rel="noopener noreferrer">
+              <a
+                className="footer__link"
+                href="https://discord.gg/EJHhcYkXMQ"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 discord
               </a>
-              <a className="footer__link" href="https://github.com/seapvvi/pinguin-boat" target="_blank" rel="noopener noreferrer">
+              <a
+                className="footer__link"
+                href="https://github.com/seapvvi/pinguin-boat"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 repository
               </a>
-              <a className="footer__link" href="https://docs.pinguin.ovh" target="_blank" rel="noopener noreferrer">
+              <a
+                className="footer__link"
+                href="https://docs.pinguin.ovh"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 docs
               </a>
             </div>
@@ -451,15 +644,25 @@ export default function LandingClient() {
             <div className="footer__col">
               <span className="label">colophon</span>
               <span className="caption">set in fraunces &amp; space mono</span>
-              <span className="caption">plates generated as svg halftone fields</span>
+              <span className="caption">
+                plates generated as svg halftone fields
+              </span>
               <span className="caption">no cookies · no analytics</span>
             </div>
           </div>
 
           <div className="footer__base">
-            <span className="caption">© 2026 pinguin boat — forged for the community</span>
             <span className="caption">
-              <span className="cjk" aria-hidden="true" style={{ fontSize: '0.9rem', marginRight: '0.4rem' }}>印</span>
+              © 2026 pinguin boat — forged for the community
+            </span>
+            <span className="caption">
+              <span
+                className="cjk"
+                aria-hidden="true"
+                style={{ fontSize: "0.9rem", marginRight: "0.4rem" }}
+              >
+                印
+              </span>
               printed matter for the web
             </span>
           </div>
