@@ -24,7 +24,7 @@
     "dotenv": "^16.6.1",
     "ffmpeg-static": "^5.2.0",
     "opusscript": "^0.1.1",
-    "pino": "^9.4.0",
+    "pino": "^10.4.0",
     "pino-roll": "^4.0.0",
     "sodium-native": "^4.3.1",
     "yt-dlp-exec": "^1.0.2",
