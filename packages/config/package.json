@@ -9,7 +9,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "dotenv": "^16.6.1",
+    "dotenv": "^18.0.10",
     "zod": "^3.24.1"
   },
   "devDependencies": {
